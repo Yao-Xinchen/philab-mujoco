@@ -1,0 +1,24 @@
+[project]
+name = "philab-mujoco"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Yao-Xinchen",email = "yao29@illinois.edu"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "jax[cuda12] (>=0.6.2,<0.7.0)",
+    "playground (>=0.0.5,<0.0.6)",
+    "rscope (>=0.0.8,<0.0.9)",
+    "mediapy (>=1.2.4,<2.0.0)",
+    "wandb (>=0.21.0,<0.22.0)"
+]
+
+[tool.poetry]
+packages = [{include = "philab_mujoco", from = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
