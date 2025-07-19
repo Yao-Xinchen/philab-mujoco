@@ -7,6 +7,11 @@ from philab_mujoco.locomotion.tron_sf import constants as consts
 
 def tron_sf_joystick_config() -> config_dict.ConfigDict:
     return config_dict.create(
+        ctrl_dt=0.02,
+        sim_dt=0.004,
+        episode_length=1000,
+        Kp=45.0,
+        Kd=1.5,
     )
 
 
