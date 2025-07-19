@@ -3,6 +3,7 @@ from ml_collections import config_dict
 from etils import epath
 import jax
 import jax.numpy as jp
+import numpy as np
 import mujoco
 from mujoco import mjx
 from mujoco.mjx._src import math
@@ -134,11 +135,11 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         self._torso_mass = self._mj_model.body_subtreemass[self._torso_body_id]
         self._site_id = self._mj_model.site("imu").id
 
-        self._feet_site_id = jp.array(
+        self._feet_site_id = np.array(
             [self._mj_model.site(name).id for name in consts.FEET_SITES]
         )
         self._floor_geom_id = self._mj_model.geom("floor").id
-        self._feet_geom_id = jp.array(
+        self._feet_geom_id = np.array(
             [self._mj_model.geom(name).id for name in consts.FEET_GEOMS]
         )
 
@@ -153,14 +154,14 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         self._foot_linvel_sensor_adr = jp.array(foot_linvel_sensor_adr)
 
         # noise scales
-        qpos_noise_scale = jp.zeros(8)
+        qpos_noise_scale = np.zeros(8)
         hip_ids = [0, 1, 4, 5]
         knee_ids = [2, 6]
         ankle_ids = [3, 7]
         qpos_noise_scale[hip_ids] = self._config.noise_config.scales.hip_pos
         qpos_noise_scale[knee_ids] = self._config.noise_config.scales.knee_pos
         qpos_noise_scale[ankle_ids] = self._config.noise_config.scales.ankle_pos
-        self._qpos_noise_scale = qpos_noise_scale
+        self._qpos_noise_scale = jp.array(qpos_noise_scale)
 
     def reset(self, rng: jax.Array) -> mjx_env.State:
         qpos = self._init_q
@@ -179,7 +180,7 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         # qpos[7:]=*U(0.5, 1.5)
         rng, key = jax.random.split(rng)
         qpos = qpos.at[7:].set(
-            qpos[7:] * jax.random.uniform(key, (12,), minval=0.5, maxval=1.5)
+            qpos[7:] * jax.random.uniform(key, (8,), minval=0.5, maxval=1.5)
         )
 
         # d(xyzrpy)=U(-0.5, 0.5)
@@ -232,10 +233,15 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
             metrics[f"reward/{k}"] = jp.zeros(())
         metrics["swing_peak"] = jp.zeros(())
 
-        contact = jp.array([
-            geoms_colliding(data, geom_id, self._floor_geom_id)
-            for geom_id in self._feet_geom_id
-        ])
+        # contact = jp.array([
+        #     geoms_colliding(data, geom_id, self._floor_geom_id)
+        #     for geom_id in self._feet_geom_id
+        # ])
+        contact = []
+        for geom_id in self._feet_geom_id:
+            contact.append(geoms_colliding(data, geom_id, self._floor_geom_id))
+        contact = jp.array(contact)
+
         obs = self._get_obs(data, info, contact)
         reward, done = jp.zeros(2)
         return mjx_env.State(data, obs, reward, done, metrics, info)
