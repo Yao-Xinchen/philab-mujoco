@@ -73,8 +73,8 @@
                             <inertial pos="0.01074 -0.00061 -0.03314" quat="0.013732 0.694322 0.0150212 0.719377" mass="0.62" diaginertia="0.0019759 0.00181179 0.000523633" />
                             <joint name="ankle_L_Joint" class="pos_joint" pos="0 0 0" axis="0 -1 0" limited="true" range="-1.15192 1.5708" frictionloss="0.01" />
                             <geom class="visual" rgba="0.26667 0.26667 0.26667 1" mesh="ankle_L_Link" />
-                            <geom name="ankle_L_collision" type="mesh" rgba="0 0 1 0" mesh="ankle_L_Link" />
-                            <site name="ankle_L_sole" pos="0 0 -0.06" size="0.01" rgba="1 0 0 1"/>
+                            <geom name="foot_L_collision" type="mesh" rgba="0 0 1 0" mesh="ankle_L_Link" />
+                            <site name="foot_L_site" pos="0 0 -0.06" size="0.01" rgba="1 0 0 1"/>
                         </body>
                     </body>
                 </body>
@@ -101,8 +101,8 @@
                             <inertial pos="0.01074 0.00061 -0.03314" quat="-0.013732 0.694322 -0.0150212 0.719377" mass="0.62" diaginertia="0.0019759 0.00181179 0.000523633" />
                             <joint name="ankle_R_Joint" class="pos_joint" pos="0 0 0" axis="0 -1 0" limited="true" range="-1.15192 1.5708" frictionloss="0.01" />
                             <geom class="visual" rgba="0.26667 0.26667 0.26667 1" mesh="ankle_R_Link" />
-                            <geom name="ankle_R_collision" type="mesh" rgba="0 0 1 0" mesh="ankle_R_Link" />
-                            <site name="ankle_R_sole" pos="0 0 -0.06" size="0.01" rgba="1 0 0 1"/>
+                            <geom name="foot_R_collision" type="mesh" rgba="0 0 1 0" mesh="ankle_R_Link" />
+                            <site name="foot_R_site" pos="0 0 -0.06" size="0.01" rgba="1 0 0 1"/>
                         </body>
                     </body>
                 </body>
@@ -132,6 +132,9 @@
         <frameangvel objtype="site" objname="imu" name="global_angvel"/>
         <framequat objtype="site" objname="imu" name="orientation"/>
 
+        <framelinvel objtype="site" objname="foot_L_site" name="foot_L_site_global_linvel"/>
+        <framelinvel objtype="site" objname="foot_R_site" name="foot_R_site_global_linvel"/>
+
         <jointpos name="abad_L_Joint"    joint="abad_L_Joint" />
         <jointpos name="hip_L_Joint"     joint="hip_L_Joint" />
         <jointpos name="knee_L_Joint"    joint="knee_L_Joint" />
@@ -141,5 +144,16 @@
         <jointpos name="knee_R_Joint"    joint="knee_R_Joint" />
         <jointpos name="ankle_R_Joint"   joint="ankle_R_Joint" />
     </sensor>
+
+    <keyframe>
+        <key name="home"
+            qpos="
+                0 0 0.8
+                1 0 0 0
+                0 0 0 0 0 0 0 0"
+            ctrl="
+                0 0 0 0 0 0 0 0"
+        />
+    </keyframe>
 
 </mujoco>

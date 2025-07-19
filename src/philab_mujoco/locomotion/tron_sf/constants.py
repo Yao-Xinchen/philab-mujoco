@@ -1,23 +1,31 @@
 from etils import epath
+from philab_mujoco import ROBOT_PATH
+
+XML = ROBOT_PATH / "SF_TRON1A" / "xml" / "robot.xml"
+
+def task_to_xml(task_name: str) -> epath.Path:
+    return XML
 
 # feet
 
 FEET_SITES = [
-    "ankle_L_sole",
-    "ankle_R_sole",
+    "foot_L_site",
+    "foot_R_site",
 ]
 
 LEFT_FEET_GEOMS = [
-    "ankle_L_collision",
+    "foot_L_collision",
 ]
 
 RIGHT_FEET_GEOMS = [
-    "ankle_R_collision",
+    "foot_R_collision",
 ]
 
 FEET_GEOMS = LEFT_FEET_GEOMS + RIGHT_FEET_GEOMS
 
-FEET_POS_SENSOR = [f"{site}_pos" for site in FEET_SITES]
+# root body
+
+ROOT_BODY = "base_Link"
 
 # base sensors
 
