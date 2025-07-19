@@ -39,11 +39,12 @@ from tensorboardX import SummaryWriter
 import wandb
 
 import mujoco_playground
-from mujoco_playground import registry
+# from mujoco_playground import registry
 from mujoco_playground import wrapper
 
 import philab_mujoco.locomotion
 import philab_mujoco.train_params
+from philab_mujoco import registry
 
 xla_flags = os.environ.get("XLA_FLAGS", "")
 xla_flags += " --xla_gpu_triton_gemm_any=True"
