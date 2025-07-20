@@ -1,17 +1,10 @@
 <mujoco model="SF_TRON1">
     <compiler angle="radian" meshdir="../meshes/" />
-    <size njmax="500" nconmax="100" />
-
-    <option iterations="3" ls_iterations="5" timestep="0.002" integrator="Euler">
-        <flag eulerdamp="disable"/>
-    </option>
 
     <default>
         <default class="tron">
-            <geom condim="1" contype="0" conaffinity="0"/>
-            <site size="0.01" rgba="1 0 0 1" group="4"/>
-            <joint axis="0 0 1" damping="1.5"/>
-            <position inheritrange="1.0" kp="35"/>
+            <joint axis="0 0 1"/>
+            <position inheritrange="1"/>
 
             <default class="tron/joint">
                 <joint armature="0.01" frictionloss="0.3" actuatorfrcrange="-30 30"/>
@@ -19,17 +12,20 @@
             </default>
 
             <default class="tron/visual">
-                <geom type="mesh" density="0" group="2" contype="0" conaffinity="0"/>
+                <geom type="mesh" contype="0" conaffinity="0" density="0" group="2"/>
             </default>
 
             <default class="tron/collision">
-                <geom group="3"/>
+                <geom group="3" rgba=".3 .3 .3 1"/>
 
                 <default class="tron/collision/foot">
-                    <geom contype="1" conaffinity="1"/>
+                    <geom friction="0.8 0.02 0.01" size="0.08 0.0275 0.006" pos="0 0 -0.05" type="box"/>
                 </default>
             </default>
 
+            <default class="tron/site">
+                <site size="0.01" rgba="1 0 0 1" group="0"/>
+            </default>
         </default>
     </default>
 
@@ -55,7 +51,6 @@
         <texture name="texplane" type="2d" builtin="checker" rgb1="0.35 0.35 0.35" rgb2="0.55 0.55 0.55" width="512" height="512" mark="cross" markrgb=".8 .8 .8"/>
         <material name="matplane" reflectance="0.0" texture="texplane" texrepeat="1 1" texuniform="true"/>
     </asset>
-        <option timestep="0.001"/>
 
     <worldbody>
         <geom name="floor" rgba="0.5 0.6 0.7 1" pos="0 0 0" size="0 0 0.25" type="plane" material="matplane" condim="3"/>
@@ -65,34 +60,34 @@
         <body name="base_Link" pos="0 0 0.85">
             <inertial pos="0.0457123 0.000139854 -0.163809" quat="0.972578 -0.00615364 -0.232461 0.00398682" mass="9.595" diaginertia="0.154712 0.11093 0.0846371" />
             <joint type="free" limited="false" damping="0.0000" stiffness="0.0000" armature="0"/>
-            <site name="imu" pos="0 0 0"/>
+            <site name="imu" pos="0 0 0" class="tron/site"/>
             <geom class="tron/visual" rgba="0.79216 0.81961 0.93333 1" mesh="base_Link" />
-            <geom name="body_collision" class="tron/collision" size="0.135 0.13 0.095" pos="0.03 0 -0.072" type="box" rgba="0 0 1 0" />
+            <geom name="body_collision" class="tron/collision" size="0.135 0.13 0.095" pos="0.03 0 -0.072" type="box"/>
 
             <body name="abad_L_Link" pos="0.05556 0.105 -0.2602">
                 <inertial pos="-0.06977 0.04479 0.00057" quat="0.595024 0.579772 0.394141 0.393019" mass="1.469" diaginertia="0.00252289 0.00208104 0.00139163" />
                 <joint name="abad_L_Joint" class="tron/joint" pos="0 0 0" axis="1 0 0" limited="true" range="-0.38397 1.39626" />
                 <geom class="tron/visual" rgba="0.79216 0.81961 0.93333 1" mesh="abad_L_Link" />
-                <geom name="abad_L_collision" class="tron/collision" size="0.05 0.025" pos="0.03 0 0" quat="0.500398 0.5 0.499602 0.5" type="cylinder" rgba="0 0 1 0" />
+                <geom name="abad_L_collision" class="tron/collision" size="0.05 0.025" pos="0.03 0 0" quat="0.500398 0.5 0.499602 0.5" type="cylinder"/>
 
                 <body name="hip_L_Link" pos="-0.077 0.0205 0">
                     <inertial pos="-0.02869 -0.0477 -0.03992" quat="0.853885 0.192797 0.226903 0.426877" mass="2.3" diaginertia="0.0233264 0.0230229 0.00277548" />
                     <joint name="hip_L_Joint" class="tron/joint" pos="0 0 0" axis="0 1 0" limited="true" range="-1.01229 1.39626" />
                     <geom class="tron/visual" rgba="1 1 1 1" mesh="hip_L_Link" />
-                    <geom name="hip_L_collision" class="tron/collision" size="0.035 0.075" pos="-0.1 -0.03 -0.14" quat="0.965093 0 0.261909 0" type="cylinder" rgba="0 0 1 0" />
+                    <geom name="hip_L_collision" class="tron/collision" size="0.035 0.075" pos="-0.1 -0.03 -0.14" quat="0.965093 0 0.261909 0" type="cylinder"/>
 
                     <body name="knee_L_Link" pos="-0.15 -0.0205 -0.25981">
                         <inertial pos="0.11452 0.0013 -0.19367" quat="0.965543 0.00476557 -0.259713 -0.0159388" mass="1.22" diaginertia="0.0144103 0.0143581 0.00061582" />
                         <joint name="knee_L_Joint" class="tron/joint" pos="0 0 0" axis="0 -1 0" limited="true" range="-0.872665 1.36136" />
                         <geom class="tron/visual" rgba="0.79216 0.81961 0.93333 1" mesh="knee_L_Link" />
-                        <geom name="knee_L_collision" class="tron/collision" size="0.02 0.13" pos="0.078 0 -0.12" quat="0.962425 0 -0.271547 0" type="cylinder" rgba="0 0 1 0" />
+                        <geom name="knee_L_collision" class="tron/collision" size="0.02 0.13" pos="0.078 0 -0.12" quat="0.962425 0 -0.271547 0" type="cylinder"/>
 
                         <body name="ankle_L_Link" pos="0.15 0 -0.25981">
                             <inertial pos="0.01074 -0.00061 -0.03314" quat="0.013732 0.694322 0.0150212 0.719377" mass="0.62" diaginertia="0.0019759 0.00181179 0.000523633" />
                             <joint name="ankle_L_Joint" class="tron/joint" pos="0 0 0" axis="0 -1 0" limited="true" range="-1.15192 1.5708" frictionloss="0.01" />
                             <geom class="tron/visual" rgba="0.26667 0.26667 0.26667 1" mesh="ankle_L_Link" />
-                            <geom name="foot_L_collision" class="tron/collision/foot" type="mesh" rgba="0 0 1 0" mesh="ankle_L_Link" />
-                            <site name="foot_L_site" pos="0 0 -0.06" size="0.01" rgba="1 0 0 1"/>
+                            <geom name="foot_L_collision" class="tron/collision/foot"/>
+                            <site name="foot_L_site" pos="0 0 -0.055" class="tron/site"/>
                         </body>
                     </body>
                 </body>
@@ -101,26 +96,26 @@
                 <inertial pos="-0.06977 -0.04479 0.00057" quat="0.393019 0.394141 0.579772 0.595024" mass="1.469" diaginertia="0.00252289 0.00208104 0.00139163" />
                 <joint name="abad_R_Joint" class="tron/joint" pos="0 0 0" axis="1 0 0" limited="true" range="-1.39626 0.38397" />
                 <geom class="tron/visual" rgba="0.79216 0.81961 0.93333 1" mesh="abad_R_Link" />
-                <geom name="abad_R_collision" class="tron/collision" size="0.05 0.025" pos="0.03 0 0" quat="0.500398 0.5 0.499602 0.5" type="cylinder" rgba="0 0 1 0" />
+                <geom name="abad_R_collision" class="tron/collision" size="0.05 0.025" pos="0.03 0 0" quat="0.500398 0.5 0.499602 0.5" type="cylinder"/>
 
                 <body name="hip_R_Link" pos="-0.077 -0.0205 0">
                     <inertial pos="-0.02869 0.0477 -0.03992" quat="0.426877 0.226903 0.192797 0.853885" mass="2.3" diaginertia="0.0233264 0.0230229 0.00277548" />
                     <joint name="hip_R_Joint" class="tron/joint" pos="0 0 0" axis="0 -1 0" limited="true" range="-1.39626 1.01229" />
                     <geom class="tron/visual" rgba="1 1 1 1" mesh="hip_R_Link" />
-                    <geom name="hip_R_collision" class="tron/collision" size="0.035 0.075" pos="-0.1 0.03 -0.14" quat="0.965093 0 0.261909 0" type="cylinder" rgba="0 0 1 0" />
+                    <geom name="hip_R_collision" class="tron/collision" size="0.035 0.075" pos="-0.1 0.03 -0.14" quat="0.965093 0 0.261909 0" type="cylinder"/>
 
                     <body name="knee_R_Link" pos="-0.15 0.0205 -0.25981">
                         <inertial pos="0.11452 -0.0013 -0.19367" quat="0.965543 -0.00476557 -0.259713 0.0159388" mass="1.22" diaginertia="0.0144103 0.0143581 0.00061582" />
                         <joint name="knee_R_Joint" class="tron/joint" pos="0 0 0" axis="0 1 0" limited="true" range="-1.36136 0.872665" />
                         <geom class="tron/visual" rgba="0.79216 0.81961 0.93333 1" mesh="knee_R_Link" />
-                        <geom name="knee_R_collision" class="tron/collision" size="0.02 0.13" pos="0.078 0 -0.12" quat="0.962425 0 -0.271547 0" type="cylinder" rgba="0 0 1 0" />
+                        <geom name="knee_R_collision" class="tron/collision" size="0.02 0.13" pos="0.078 0 -0.12" quat="0.962425 0 -0.271547 0" type="cylinder"/>
 
                         <body name="ankle_R_Link" pos="0.15 0 -0.25981">
                             <inertial pos="0.01074 0.00061 -0.03314" quat="-0.013732 0.694322 -0.0150212 0.719377" mass="0.62" diaginertia="0.0019759 0.00181179 0.000523633" />
                             <joint name="ankle_R_Joint" class="tron/joint" pos="0 0 0" axis="0 -1 0" limited="true" range="-1.15192 1.5708" frictionloss="0.01" />
                             <geom class="tron/visual" rgba="0.26667 0.26667 0.26667 1" mesh="ankle_R_Link" />
-                            <geom name="foot_R_collision" class="tron/collision/foot" type="mesh" rgba="0 0 1 0" mesh="ankle_R_Link" />
-                            <site name="foot_R_site" pos="0 0 -0.06" size="0.01" rgba="1 0 0 1"/>
+                            <geom name="foot_R_collision" class="tron/collision/foot"/>
+                            <site name="foot_R_site" pos="0 0 -0.055" class="tron/site"/>
                         </body>
                     </body>
                 </body>
