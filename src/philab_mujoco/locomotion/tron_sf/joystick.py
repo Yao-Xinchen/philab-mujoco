@@ -111,7 +111,7 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         side_names = ["L", "R"]
 
         hip_indices = []
-        hip_joint_names = ["abad", "hip"]
+        hip_joint_names = ["abad"]
         for side in side_names:
             for joint_name in hip_joint_names:
                 hip_indices.append(
@@ -128,7 +128,10 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
                 )
             self._knee_indices = jp.array(knee_indices)
 
-        self._weights = jp.array([])
+        self._weights = jp.array([
+            1.0, 0.01, 0.01, 1.0,
+            1.0, 0.01, 0.01, 1.0,
+        ])  # encourage movement on hips and knees
 
         # link indices
         self._torso_body_id = self._mj_model.body(consts.ROOT_BODY).id
