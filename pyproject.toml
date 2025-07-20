@@ -12,7 +12,8 @@ dependencies = [
     "playground (>=0.0.5,<0.0.6)",
     "rscope (>=0.0.8,<0.0.9)",
     "mediapy (>=1.2.4,<2.0.0)",
-    "wandb (>=0.21.0,<0.22.0)"
+    "wandb (>=0.21.0,<0.22.0)",
+    "tensorboard (>=2.20.0,<3.0.0)"
 ]
 
 [tool.poetry]
