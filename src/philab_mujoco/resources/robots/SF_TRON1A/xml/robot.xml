@@ -1,10 +1,15 @@
 <mujoco model="SF_TRON1">
     <compiler angle="radian" meshdir="../meshes/" />
 
+    <option iterations="3" ls_iterations="5" timestep="0.002" integrator="Euler">
+        <flag eulerdamp="disable"/>
+    </option>
+
     <default>
         <default class="tron">
-            <joint axis="0 0 1"/>
-            <position inheritrange="1"/>
+            <geom condim="1" contype="0" conaffinity="0"/>
+            <site size="0.01" rgba="1 0 0 1" group="4"/>
+            <joint axis="0 0 1" damping="1.5"/>
 
             <default class="tron/joint">
                 <joint armature="0.01" frictionloss="0.3" actuatorfrcrange="-30 30"/>
@@ -19,7 +24,8 @@
                 <geom group="3" rgba=".3 .3 .3 1"/>
 
                 <default class="tron/collision/foot">
-                    <geom friction="0.8 0.02 0.01" size="0.08 0.0275 0.006" pos="0 0 -0.05" type="box"/>
+                    <geom friction="0.8 0.02 0.01" size="0.08 0.0275 0.006" pos="0 0 -0.05" type="box"
+                          contype="1" conaffinity="1"/>
                 </default>
             </default>
 
