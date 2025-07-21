@@ -14,11 +14,11 @@ FEET_SITES = [
 ]
 
 LEFT_FEET_GEOMS = [
-    "foot_L_collision_front",
+    "foot_L_collision",
 ]
 
 RIGHT_FEET_GEOMS = [
-    "foot_R_collision_front",
+    "foot_R_collision",
 ]
 
 FEET_GEOMS = LEFT_FEET_GEOMS + RIGHT_FEET_GEOMS
