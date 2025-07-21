@@ -386,7 +386,7 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         )
 
         state = jp.hstack([
-            noisy_linvel,  # 3
+            # noisy_linvel,  # 3
             noisy_gyro,  # 3
             noisy_gravity,  # 3
             info["command"],  # 3

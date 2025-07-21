@@ -443,7 +443,7 @@ def main(argv):
     value_params = params[2]["params"]
 
     # export the policy to ONNX format
-    params_to_onnx(policy_params, 40, logdir / "policy.onnx")
+    params_to_onnx(policy_params, 37, logdir / "policy.onnx")
 
     # Prepare for evaluation
     eval_env = (
