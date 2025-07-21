@@ -20,6 +20,7 @@ import json
 import os
 import time
 import warnings
+import pickle
 
 from absl import app
 from absl import flags
@@ -28,24 +29,21 @@ from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import networks_vision as ppo_networks_vision
 from brax.training.agents.ppo import train as ppo
 from etils import epath
-from flax.training import orbax_utils
 import jax
 import jax.numpy as jp
 import mediapy as media
 from ml_collections import config_dict
 import mujoco
-from orbax import checkpoint as ocp
 from tensorboardX import SummaryWriter
 import wandb
 
-import mujoco_playground
 # from mujoco_playground import registry
 from mujoco_playground import wrapper
 
 import philab_mujoco.locomotion
 import philab_mujoco.train_params
 from philab_mujoco import registry
-from philab_mujoco.export import params_to_onnx
+from philab_mujoco.utilities.export import params_to_onnx
 
 xla_flags = os.environ.get("XLA_FLAGS", "")
 xla_flags += " --xla_gpu_triton_gemm_any=True"
@@ -438,12 +436,24 @@ def main(argv):
     inference_fn = make_inference_fn(params, deterministic=True)
     jit_inference_fn = jax.jit(inference_fn)
 
-    normalizer_params = params[0]
-    policy_params = params[1]["params"]
-    value_params = params[2]["params"]
+    # normalizer_params = params[0]
+    # policy_params = params[1]["params"]
+    # value_params = params[2]["params"]
+    #
+    # # export the policy to ONNX format
+    # params_to_onnx(policy_params, 37, logdir / "policy.onnx")
 
-    # export the policy to ONNX format
-    params_to_onnx(policy_params, 37, logdir / "policy.onnx")
+    # Save the parameters to a file
+    params_pkl = {
+        "normalizer_params": params[0],
+        "policy_params": params[1],
+        "value_params": params[2],
+    }
+    with open(logdir / "params.pkl", "wb") as f:
+        pickle.dump(params_pkl, f)
+    print(f"Parameters saved to {logdir / 'params.pkl'}")
+
+    # Use src/philab_mujoco/utilities/export.ipynb to export the policy to ONNX format
 
     # Prepare for evaluation
     eval_env = (
