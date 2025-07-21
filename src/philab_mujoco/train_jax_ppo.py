@@ -45,6 +45,7 @@ from mujoco_playground import wrapper
 import philab_mujoco.locomotion
 import philab_mujoco.train_params
 from philab_mujoco import registry
+from philab_mujoco.export import params_to_onnx
 
 xla_flags = os.environ.get("XLA_FLAGS", "")
 xla_flags += " --xla_gpu_triton_gemm_any=True"
@@ -437,6 +438,13 @@ def main(argv):
     inference_fn = make_inference_fn(params, deterministic=True)
     jit_inference_fn = jax.jit(inference_fn)
 
+    normalizer_params = params[0]
+    policy_params = params[1]["params"]
+    value_params = params[2]["params"]
+
+    # export the policy to ONNX format
+    params_to_onnx(policy_params, 40, logdir / "policy.onnx")
+
     # Prepare for evaluation
     eval_env = (
         None if _VISION.value else registry.load(_ENV_NAME.value, config=env_cfg)
@@ -486,7 +494,7 @@ def main(argv):
     scene_option.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = False
 
     frames = eval_env.render(
-        traj, height=480, width=640, scene_option=scene_option
+        traj, height=2160, width=3840, scene_option=scene_option
     )
     media.write_video("rollout.mp4", frames, fps=fps)
     print("Rollout video saved as 'rollout.mp4'.")
