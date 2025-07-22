@@ -8,8 +8,10 @@ from mujoco import mjx
 from mujoco_playground import MjxEnv
 
 from philab_mujoco.locomotion.tron_sf.joystick import TronSfJoystickEnv, tron_sf_joystick_config
-
 from philab_mujoco.locomotion.tron_sf.randomize import tron_sf_randomize
+
+from philab_mujoco.locomotion.tron_pf.joystick import TronPfJoystickEnv, tron_pf_joystick_config
+from philab_mujoco.locomotion.tron_pf.randomize import tron_pf_randomize
 
 # ==============================================================================
 # register environments
@@ -18,14 +20,22 @@ _envs = {
     "TronSfJoystick": functools.partial(
         TronSfJoystickEnv, task="flat_terrain"
     ),
+
+    "TronPfJoystick": functools.partial(
+        TronPfJoystickEnv, task="flat_terrain"
+    ),
 }
 
 _cfgs = {
     "TronSfJoystick": tron_sf_joystick_config,
+
+    "TronPfJoystick": tron_pf_joystick_config,
 }
 
 _randomizer = {
     "TronSfJoystick": tron_sf_randomize,
+
+    "TronPfJoystick": tron_pf_randomize,
 }
 
 

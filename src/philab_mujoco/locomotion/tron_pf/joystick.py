@@ -129,8 +129,8 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
             self._knee_indices = jp.array(knee_indices)
 
         self._weights = jp.array([
-            1.0, 0.01, 0.01, 1.0,
-            1.0, 0.01, 0.01, 1.0,
+            1.0, 0.01, 0.01,
+            1.0, 0.01, 0.01,
         ])  # encourage movement on hips and knees
 
         # link indices
