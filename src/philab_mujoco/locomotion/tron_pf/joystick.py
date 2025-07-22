@@ -12,16 +12,16 @@ from mujoco_playground._src import gait
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src.collision import geoms_colliding
 
-from philab_mujoco.locomotion.tron_sf import base
-from philab_mujoco.locomotion.tron_sf import constants as consts
+from philab_mujoco.locomotion.tron_pf import base
+from philab_mujoco.locomotion.tron_pf import constants as consts
 
 
-def tron_sf_joystick_config() -> config_dict.ConfigDict:
+def tron_pf_joystick_config() -> config_dict.ConfigDict:
     return config_dict.create(
         ctrl_dt=0.02,
         sim_dt=0.002,
         episode_length=1000,
-        action_num=8,
+        action_num=6,
         action_repeat=1,
         action_scale=0.5,
         history_len=1,
@@ -31,7 +31,6 @@ def tron_sf_joystick_config() -> config_dict.ConfigDict:
             scales=config_dict.create(
                 hip_pos=0.05,  # rad
                 knee_pos=0.05,
-                ankle_pos=0.05,
                 joint_vel=1.5,  # rad/s
                 gravity=0.05,
                 linvel=0.1,
@@ -83,11 +82,11 @@ def tron_sf_joystick_config() -> config_dict.ConfigDict:
     )
 
 
-class TronSfJoystickEnv(base.TronSfBaseEnv):
+class TronPfJoystickEnv(base.TronPfBaseEnv):
     def __init__(
             self,
             task: str = None,
-            config: config_dict.ConfigDict = tron_sf_joystick_config(),
+            config: config_dict.ConfigDict = tron_pf_joystick_config(),
             config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
     ):
         super().__init__(
@@ -159,12 +158,10 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
 
         # noise scales
         qpos_noise_scale = np.zeros(self._config.action_num)
-        hip_ids = [0, 1, 4, 5]
-        knee_ids = [2, 6]
-        ankle_ids = [3, 7]
+        hip_ids = [0, 1, 3, 4]
+        knee_ids = [2, 5]
         qpos_noise_scale[hip_ids] = self._config.noise_config.scales.hip_pos
         qpos_noise_scale[knee_ids] = self._config.noise_config.scales.knee_pos
-        qpos_noise_scale[ankle_ids] = self._config.noise_config.scales.ankle_pos
         self._qpos_noise_scale = jp.array(qpos_noise_scale)
 
     def reset(self, rng: jax.Array) -> mjx_env.State:
@@ -391,9 +388,9 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
             noisy_gyro,  # 3
             noisy_gravity,  # 3
             info["command"],  # 3
-            noisy_joint_angles - self._default_pose,  # 8
-            noisy_joint_vel,  # 8
-            info["last_act"],  # 8
+            noisy_joint_angles - self._default_pose,  # 6
+            noisy_joint_vel,  # 6
+            info["last_act"],  # 6
             phase,
         ])
 
@@ -412,7 +409,7 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
             joint_angles - self._default_pose,
             joint_vel,
             root_height,  # 1
-            data.actuator_force,  # 8
+            data.actuator_force,  # 6
             contact,  # 2
             feet_vel,  # 2*3
             info["feet_air_time"],  # 2

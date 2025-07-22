@@ -1,7 +1,7 @@
 from etils import epath
 from philab_mujoco import ROBOT_PATH
 
-XML = ROBOT_PATH / "SF_TRON1A" / "xml" / "robot.xml"
+XML = ROBOT_PATH / "PF_TRON1A" / "xml" / "robot.xml"
 
 def task_to_xml(task_name: str) -> epath.Path:
     return XML
