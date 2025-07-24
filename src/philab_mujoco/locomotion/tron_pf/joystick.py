@@ -71,7 +71,7 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
                 dof_pos_limits=-2.0,
                 pose=-1.0,
             ),
-            tracking_sigma=0.5,
+            tracking_sigma=0.4,
             max_foot_height=0.1,
             base_height_target=0.5,
             min_feet_distance=0.115,
@@ -85,7 +85,7 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
         lin_vel_x=[-1.0, 1.0],
         lin_vel_y=[-1.0, 1.0],
         ang_vel_yaw=[-1.0, 1.0],
-        gait_freq_range=[1.5, 4.0],
+        gait_freq_range=[1.5, 2.5],
     )
 
 
@@ -208,6 +208,7 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         )
         phase_dt = 2 * jp.pi * self.dt * gait_freq
         phase = jp.array([0, jp.pi])
+        self.gait_freq = gait_freq
 
         rng, cmd_rng = jax.random.split(rng)
         cmd = self.sample_command(cmd_rng)
@@ -424,6 +425,7 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
             contact,  # 2
             feet_vel,  # 2*3
             info["feet_air_time"],  # 2
+            self.gait_freq,
         ])
 
         return {
@@ -450,6 +452,9 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
             "tracking_ang_vel": self._reward_tracking_ang_vel(
                 info["command"], self.get_gyro(data)
             ),
+            # "stay_still": self._reward_stay_still(
+            #     info["command"], self.get_local_linvel(data), self.get_gyro(data)
+            # ),
             # Base-related rewards.
             "lin_vel_z": self._cost_lin_vel_z(self.get_global_linvel(data)),
             "ang_vel_xy": self._cost_ang_vel_xy(self.get_global_angvel(data)),
@@ -510,6 +515,28 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
     ) -> jax.Array:
         ang_vel_error = jp.square(commands[2] - ang_vel[2])
         return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
+
+    # def _reward_stay_still(
+    #         self,
+    #         commands: jax.Array,
+    #         local_vel: jax.Array,
+    #         ang_vel: jax.Array,
+    # ) -> jax.Array:
+    #     cmd_norm = jp.linalg.norm(commands)
+    #
+    #     # Only apply this reward when commands are near zero
+    #     is_stationary_cmd = cmd_norm < 0.1
+    #
+    #     # Penalize any movement when commands are zero
+    #     lin_vel_penalty = jp.sum(jp.square(local_vel[:2]))
+    #     ang_vel_penalty = jp.square(ang_vel[2])
+    #
+    #     # Use a steep exponential to heavily penalize movement when stationary
+    #     movement_penalty = lin_vel_penalty + ang_vel_penalty
+    #     reward = jp.exp(-movement_penalty / 0.01)  # Very steep curve
+    #
+    #     # Only apply reward when commands are near zero
+    #     return jp.where(is_stationary_cmd, reward, jp.array(0.0))
 
     # Base-related rewards.
 
@@ -602,9 +629,9 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         foot_heights = data.site_xpos[self._feet_site_id, 2]  # z-coordinates of feet
         foot_velocities = data.sensordata[self._foot_linvel_sensor_adr]  # foot linear velocities
         foot_velocities_xy = foot_velocities[:, :2]  # only x-y components
-        
+
         cost = jp.sum(
-            jp.exp(-foot_heights / feet_height) 
+            jp.exp(-foot_heights / feet_height)
             * jp.square(jp.linalg.norm(foot_velocities_xy, axis=-1))
         )
         return cost
@@ -613,14 +640,14 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         foot_velocities = data.sensordata[self._foot_linvel_sensor_adr]  # foot linear velocities
         z_vels = foot_velocities[:, 2]  # z-components of foot velocities
         foot_heights = data.site_xpos[self._feet_site_id, 2]  # z-coordinates of feet
-        
+
         # Check if feet are about to land: low height, not in contact, and moving downward
         about_to_land = (
-            (foot_heights < self._config.reward_config.about_landing_threshold) 
-            & (~contact) 
-            & (z_vels < 0.0)
+                (foot_heights < self._config.reward_config.about_landing_threshold)
+                & (~contact)
+                & (z_vels < 0.0)
         )
-        
+
         # Only penalize downward velocities when about to land
         landing_z_vels = jp.where(about_to_land, z_vels, jp.zeros_like(z_vels))
         cost = jp.sum(jp.square(landing_z_vels))
