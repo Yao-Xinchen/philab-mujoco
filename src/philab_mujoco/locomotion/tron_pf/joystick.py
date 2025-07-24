@@ -43,20 +43,24 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
                 tracking_lin_vel=1.0,
                 tracking_ang_vel=0.5,
                 # Base related rewards.
-                lin_vel_z=0.0,
-                ang_vel_xy=-0.15,
-                orientation=-1.0,
-                base_height=0.0,
+                lin_vel_z=-0.5,
+                ang_vel_xy=-0.05,
+                orientation=-10.0,
+                base_height=-2.0,
                 # Energy related rewards.
-                torques=-2.5e-5,
+                torques=-8.0e-5,
                 action_rate=-0.01,
                 energy=0.0,
+                joint_acc=-2.5e-7,
                 # Feet related rewards.
+                feet_distance=-100.0,
+                feet_regulation=-0.05,
+                feet_landing_vel=-0.15,
                 feet_clearance=0.0,
-                feet_air_time=2.0,
+                feet_air_time=1.0,
                 feet_slip=-0.25,
                 feet_height=0.0,
-                feet_phase=1.0,
+                feet_phase=0.5,
                 # Other rewards.
                 stand_still=0.0,
                 alive=0.0,
@@ -64,12 +68,14 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
                 # Pose related rewards.
                 joint_deviation_knee=-0.1,
                 joint_deviation_hip=-0.25,
-                dof_pos_limits=-1.0,
+                dof_pos_limits=-2.0,
                 pose=-1.0,
             ),
             tracking_sigma=0.5,
             max_foot_height=0.1,
             base_height_target=0.5,
+            min_feet_distance=0.115,
+            about_landing_threshold=0.08,
         ),
         push_config=config_dict.create(
             enable=True,
@@ -79,7 +85,7 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
         lin_vel_x=[-1.0, 1.0],
         lin_vel_y=[-1.0, 1.0],
         ang_vel_yaw=[-1.0, 1.0],
-        gait_freq_range=[1.5, 5.0],
+        gait_freq_range=[1.5, 4.0],
     )
 
 
@@ -196,8 +202,8 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         # Phase, freq=U(1.0, 1.5)
         rng, key = jax.random.split(rng)
         gait_freq = jax.random.uniform(
-            key, (1,), 
-            minval=self._config.gait_freq_range[0], 
+            key, (1,),
+            minval=self._config.gait_freq_range[0],
             maxval=self._config.gait_freq_range[1]
         )
         phase_dt = 2 * jp.pi * self.dt * gait_freq
@@ -455,7 +461,11 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
                 action, info["last_act"], info["last_last_act"]
             ),
             "energy": self._cost_energy(data.qvel[6:], data.actuator_force),
+            "joint_acc": self._cost_joint_acc(data.qacc[6:]),
             # Feet related rewards.
+            "feet_distance": self._cost_feet_distance(data),
+            "feet_regulation": self._cost_feet_regulation(data),
+            "feet_landing_vel": self._cost_feet_landing_vel(data, contact),
             "feet_slip": self._cost_feet_slip(data, contact, info),
             "feet_clearance": self._cost_feet_clearance(data, info),
             "feet_height": self._cost_feet_height(
@@ -527,6 +537,9 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
     ) -> jax.Array:
         return jp.sum(jp.abs(qvel) * jp.abs(qfrc_actuator))
 
+    def _cost_joint_acc(self, qcc: jax.Array) -> jax.Array:
+        return jp.sum(jp.square(qcc))
+
     def _cost_action_rate(
             self, act: jax.Array, last_act: jax.Array, last_last_act: jax.Array
     ) -> jax.Array:
@@ -577,6 +590,41 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         return jp.sum(jp.square(qpos - self._default_pose) * self._weights)
 
     # Feet related rewards.
+
+    def _cost_feet_distance(self, data: mjx.Data) -> jax.Array:
+        feet_pos = data.site_xpos[self._feet_site_id]
+        feet_dist = jp.linalg.norm(feet_pos[0] - feet_pos[1])
+        reward = jp.clip(self._config.reward_config.min_feet_distance - feet_dist, 0.0, 1.0)
+        return reward
+
+    def _cost_feet_regulation(self, data: mjx.Data) -> jax.Array:
+        feet_height = self._config.reward_config.base_height_target * 0.001
+        foot_heights = data.site_xpos[self._feet_site_id, 2]  # z-coordinates of feet
+        foot_velocities = data.sensordata[self._foot_linvel_sensor_adr]  # foot linear velocities
+        foot_velocities_xy = foot_velocities[:, :2]  # only x-y components
+        
+        cost = jp.sum(
+            jp.exp(-foot_heights / feet_height) 
+            * jp.square(jp.linalg.norm(foot_velocities_xy, axis=-1))
+        )
+        return cost
+
+    def _cost_feet_landing_vel(self, data: mjx.Data, contact: jax.Array) -> jax.Array:
+        foot_velocities = data.sensordata[self._foot_linvel_sensor_adr]  # foot linear velocities
+        z_vels = foot_velocities[:, 2]  # z-components of foot velocities
+        foot_heights = data.site_xpos[self._feet_site_id, 2]  # z-coordinates of feet
+        
+        # Check if feet are about to land: low height, not in contact, and moving downward
+        about_to_land = (
+            (foot_heights < self._config.reward_config.about_landing_threshold) 
+            & (~contact) 
+            & (z_vels < 0.0)
+        )
+        
+        # Only penalize downward velocities when about to land
+        landing_z_vels = jp.where(about_to_land, z_vels, jp.zeros_like(z_vels))
+        cost = jp.sum(jp.square(landing_z_vels))
+        return cost
 
     def _cost_feet_slip(
             self, data: mjx.Data, contact: jax.Array, info: dict[str, Any]
@@ -637,9 +685,6 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         rz = gait.get_rz(phase, swing_height=foot_height)
         error = jp.sum(jp.square(foot_z - rz))
         reward = jp.exp(-error / 0.01)
-        # TODO(kevin): Ensure no movement at 0 command.
-        # cmd_norm = jp.linalg.norm(commands)
-        # reward *= cmd_norm > 0.1  # No reward for zero commands.
         return reward
 
     def sample_command(self, rng: jax.Array) -> jax.Array:
