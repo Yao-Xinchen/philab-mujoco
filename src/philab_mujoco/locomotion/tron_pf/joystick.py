@@ -208,7 +208,6 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         )
         phase_dt = 2 * jp.pi * self.dt * gait_freq
         phase = jp.array([0, jp.pi])
-        self.gait_freq = gait_freq
 
         rng, cmd_rng = jax.random.split(rng)
         cmd = self.sample_command(cmd_rng)
@@ -235,6 +234,7 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
             # Phase related.
             "phase_dt": phase_dt,
             "phase": phase,
+            "gait_freq": gait_freq,
             # Push related.
             "push": jp.array([0.0, 0.0]),
             "push_step": 0,
@@ -425,7 +425,7 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
             contact,  # 2
             feet_vel,  # 2*3
             info["feet_air_time"],  # 2
-            self.gait_freq,
+            info["gait_freq"],
         ])
 
         return {
