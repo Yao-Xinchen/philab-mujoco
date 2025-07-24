@@ -80,6 +80,7 @@ def tron_sf_joystick_config() -> config_dict.ConfigDict:
         lin_vel_x=[-1.0, 1.0],
         lin_vel_y=[-1.0, 1.0],
         ang_vel_yaw=[-1.0, 1.0],
+        gait_freq_range=[1.25, 1.5],
     )
 
 
@@ -197,7 +198,11 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
 
         # Phase, freq=U(1.0, 1.5)
         rng, key = jax.random.split(rng)
-        gait_freq = jax.random.uniform(key, (1,), minval=1.25, maxval=1.5)
+        gait_freq = jax.random.uniform(
+            key, (1,), 
+            minval=self._config.gait_freq_range[0], 
+            maxval=self._config.gait_freq_range[1]
+        )
         phase_dt = 2 * jp.pi * self.dt * gait_freq
         phase = jp.array([0, jp.pi])
 
