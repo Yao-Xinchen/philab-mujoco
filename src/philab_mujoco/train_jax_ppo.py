@@ -26,7 +26,6 @@ from absl import app
 from absl import flags
 from absl import logging
 from brax.training.agents.ppo import networks as ppo_networks
-from brax.training.agents.ppo import networks_vision as ppo_networks_vision
 from brax.training.agents.ppo import train as ppo
 from etils import epath
 import jax
@@ -43,7 +42,6 @@ from mujoco_playground import wrapper
 import philab_mujoco.locomotion
 import philab_mujoco.train_params
 from philab_mujoco import registry
-from philab_mujoco.utilities.export import params_to_onnx
 
 xla_flags = os.environ.get("XLA_FLAGS", "")
 xla_flags += " --xla_gpu_triton_gemm_any=True"
@@ -68,7 +66,6 @@ _ENV_NAME = flags.DEFINE_string(
     "LeapCubeReorient",
     f"Name of the environment. One of {', '.join(registry.ALL_ENVS)}",
 )
-_VISION = flags.DEFINE_boolean("vision", False, "Use vision input")
 _LOAD_CHECKPOINT_PATH = flags.DEFINE_string(
     "load_checkpoint_path", None, "Path to load checkpoint from"
 )
@@ -243,9 +240,6 @@ def main(argv):
         ppo_params.network_factory.policy_obs_key = _POLICY_OBS_KEY.value
     if _VALUE_OBS_KEY.present:
         ppo_params.network_factory.value_obs_key = _VALUE_OBS_KEY.value
-    if _VISION.value:
-        env_cfg.vision = True
-        env_cfg.vision_config.render_batch_size = ppo_params.num_envs
     env = registry.load(_ENV_NAME.value, config=env_cfg)
     if _RUN_EVALS.present:
         ppo_params.run_evals = _RUN_EVALS.value
@@ -311,11 +305,7 @@ def main(argv):
     if "network_factory" in training_params:
         del training_params["network_factory"]
 
-    network_fn = (
-        ppo_networks_vision.make_ppo_networks_vision
-        if _VISION.value
-        else ppo_networks.make_ppo_networks
-    )
+    network_fn = ppo_networks.make_ppo_networks
     if hasattr(ppo_params, "network_factory"):
         network_factory = functools.partial(
             network_fn, **ppo_params.network_factory
@@ -328,21 +318,8 @@ def main(argv):
             _ENV_NAME.value
         )
 
-    if _VISION.value:
-        env = wrapper.wrap_for_brax_training(
-            env,
-            vision=True,
-            num_vision_envs=env_cfg.vision_config.render_batch_size,
-            episode_length=ppo_params.episode_length,
-            action_repeat=ppo_params.action_repeat,
-            randomization_fn=training_params.get("randomization_fn"),
-        )
 
-    num_eval_envs = (
-        ppo_params.num_envs
-        if _VISION.value
-        else ppo_params.get("num_eval_envs", 128)
-    )
+    num_eval_envs = ppo_params.get("num_eval_envs", 128)
 
     if "num_eval_envs" in training_params:
         del training_params["num_eval_envs"]
@@ -354,7 +331,7 @@ def main(argv):
         seed=_SEED.value,
         restore_checkpoint_path=restore_checkpoint_path,
         save_checkpoint_path=ckpt_path,
-        wrap_env_fn=None if _VISION.value else wrapper.wrap_for_brax_training,
+        wrap_env_fn=wrapper.wrap_for_brax_training,
         num_eval_envs=num_eval_envs,
     )
 
@@ -383,30 +360,25 @@ def main(argv):
                 )
 
     # Load evaluation environment
-    eval_env = (
-        None if _VISION.value else registry.load(_ENV_NAME.value, config=env_cfg)
-    )
+    eval_env = registry.load(_ENV_NAME.value, config=env_cfg)
 
     policy_params_fn = lambda *args: None
     if _RSCOPE_ENVS.value:
         # Interactive visualisation of policy checkpoints
         from rscope import brax as rscope_utils
 
-        if not _VISION.value:
-            rscope_env = registry.load(_ENV_NAME.value, config=env_cfg)
-            rscope_env = wrapper.wrap_for_brax_training(
-                rscope_env,
-                episode_length=ppo_params.episode_length,
-                action_repeat=ppo_params.action_repeat,
-                randomization_fn=training_params.get("randomization_fn"),
-            )
-        else:
-            rscope_env = env
+        rscope_env = registry.load(_ENV_NAME.value, config=env_cfg)
+        rscope_env = wrapper.wrap_for_brax_training(
+            rscope_env,
+            episode_length=ppo_params.episode_length,
+            action_repeat=ppo_params.action_repeat,
+            randomization_fn=training_params.get("randomization_fn"),
+        )
 
         rscope_handle = rscope_utils.BraxRolloutSaver(
             rscope_env,
             ppo_params,
-            _VISION.value,
+            False,
             _RSCOPE_ENVS.value,
             _DETERMINISTIC_RSCOPE.value,
             jax.random.PRNGKey(_SEED.value),
@@ -422,7 +394,7 @@ def main(argv):
         environment=env,
         progress_fn=progress,
         policy_params_fn=policy_params_fn,
-        eval_env=None if _VISION.value else eval_env,
+        eval_env=eval_env,
     )
 
     print("Done training.")
@@ -435,13 +407,6 @@ def main(argv):
     # Create inference function
     inference_fn = make_inference_fn(params, deterministic=True)
     jit_inference_fn = jax.jit(inference_fn)
-
-    # normalizer_params = params[0]
-    # policy_params = params[1]["params"]
-    # value_params = params[2]["params"]
-    #
-    # # export the policy to ONNX format
-    # params_to_onnx(policy_params, 37, logdir / "policy.onnx")
 
     # Save the parameters to a file
     params_pkl = {
@@ -456,25 +421,16 @@ def main(argv):
     # Use src/philab_mujoco/utilities/export.ipynb to export the policy to ONNX format
 
     # Prepare for evaluation
-    eval_env = (
-        None if _VISION.value else registry.load(_ENV_NAME.value, config=env_cfg)
-    )
+    eval_env = registry.load(_ENV_NAME.value, config=env_cfg)
     num_envs = 1
-    if _VISION.value:
-        eval_env = env
-        num_envs = env_cfg.vision_config.render_batch_size
 
     jit_reset = jax.jit(eval_env.reset)
     jit_step = jax.jit(eval_env.step)
 
     rng = jax.random.PRNGKey(123)
     rng, reset_rng = jax.random.split(rng)
-    if _VISION.value:
-        reset_rng = jp.asarray(jax.random.split(reset_rng, num_envs))
     state = jit_reset(reset_rng)
-    state0 = (
-        jax.tree_util.tree_map(lambda x: x[0], state) if _VISION.value else state
-    )
+    state0 = state
     rollout = [state0]
 
     # Run evaluation rollout
@@ -482,11 +438,7 @@ def main(argv):
         act_rng, rng = jax.random.split(rng)
         ctrl, _ = jit_inference_fn(state.obs, act_rng)
         state = jit_step(state, ctrl)
-        state0 = (
-            jax.tree_util.tree_map(lambda x: x[0], state)
-            if _VISION.value
-            else state
-        )
+        state0 = state
         rollout.append(state0)
         if state0.done:
             break
