@@ -168,6 +168,9 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         qpos_noise_scale[ankle_ids] = self._config.noise_config.scales.ankle_pos
         self._qpos_noise_scale = jp.array(qpos_noise_scale)
 
+        # state history buffer size
+        self._state_history_len = 10
+
     def reset(self, rng: jax.Array) -> mjx_env.State:
         qpos = self._init_q
         qvel = jp.zeros(self.mjx_model.nv)
@@ -199,8 +202,8 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         # Phase, freq=U(1.0, 1.5)
         rng, key = jax.random.split(rng)
         gait_freq = jax.random.uniform(
-            key, (1,), 
-            minval=self._config.gait_freq_range[0], 
+            key, (1,),
+            minval=self._config.gait_freq_range[0],
             maxval=self._config.gait_freq_range[1]
         )
         phase_dt = 2 * jp.pi * self.dt * gait_freq
@@ -252,6 +255,12 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         contact = jp.array(contact)
 
         obs = self._get_obs(data, info, contact)
+
+        # Initialize state history buffer with current state repeated 10 times
+        state_dim = obs["state"].shape[0]
+        initial_state_history = jp.tile(obs["state"], (self._state_history_len, 1))
+        info["state_history"] = initial_state_history
+
         reward, done = jp.zeros(2)
         return mjx_env.State(data, obs, reward, done, metrics, info)
 
@@ -294,6 +303,14 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         state.info["swing_peak"] = jp.maximum(state.info["swing_peak"], p_fz)
 
         obs = self._get_obs(data, state.info, contact)
+
+        # Update state history buffer - shift left and add new state
+        new_state_history = jp.concatenate([
+            state.info["state_history"][1:],  # Remove oldest
+            obs["state"][None, :]  # Add newest at the end
+        ], axis=0)
+        state.info["state_history"] = new_state_history
+
         done = self._get_termination(data)
 
         rewards = self._get_reward(
@@ -423,9 +440,13 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
             info["feet_air_time"],  # 2
         ])
 
+        # Get state history if available, otherwise return zeros
+        state_history = info.get("state_history", jp.zeros((self._state_history_len, state.shape[0])))
+
         return {
             "state": state,
             "privileged_state": privileged_state,
+            "state_history": state_history.flatten(),
         }
 
     def _get_reward(
