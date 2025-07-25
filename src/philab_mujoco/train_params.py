@@ -39,8 +39,10 @@ def brax_ppo_config(env_name: str) -> config_dict.ConfigDict:
         rl_config.network_factory = config_dict.create(
             policy_hidden_layer_sizes=(512, 256, 128),
             value_hidden_layer_sizes=(512, 256, 128),
+            encoder_hidden_layer_sizes=(128, 64, 16),
             policy_obs_key="state",
             value_obs_key="privileged_state",
+            encoder_obs_key="state_history",
         )
     else:
         raise ValueError(f"Unsupported env: {env_name}")
