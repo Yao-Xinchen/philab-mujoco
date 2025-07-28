@@ -256,11 +256,6 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
 
         obs = self._get_obs(data, info, contact)
 
-        # Initialize state history buffer with current state repeated 10 times
-        state_dim = obs["state"].shape[0]
-        initial_state_history = jp.tile(obs["state"], (self._state_history_len, 1))
-        info["state_history"] = initial_state_history
-
         reward, done = jp.zeros(2)
         return mjx_env.State(data, obs, reward, done, metrics, info)
 
@@ -303,13 +298,6 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
         state.info["swing_peak"] = jp.maximum(state.info["swing_peak"], p_fz)
 
         obs = self._get_obs(data, state.info, contact)
-
-        # Update state history buffer - shift left and add new state
-        new_state_history = jp.concatenate([
-            state.info["state_history"][1:],  # Remove oldest
-            obs["state"][None, :]  # Add newest at the end
-        ], axis=0)
-        state.info["state_history"] = new_state_history
 
         done = self._get_termination(data)
 
@@ -440,8 +428,17 @@ class TronSfJoystickEnv(base.TronSfBaseEnv):
             info["feet_air_time"],  # 2
         ])
 
-        # Get state history if available, otherwise return zeros
-        state_history = info.get("state_history", jp.zeros((self._state_history_len, state.shape[0])))
+        prev_state_history = info.get(
+            "state_history",
+            jp.tile(state, (self._state_history_len, 1))
+        )
+
+        # Update state history buffer - shift left and add new state
+        state_history = jp.concatenate([
+            prev_state_history[1:],  # Remove oldest
+            state[None, :]  # Add newest at the end
+        ], axis=0)
+        info["state_history"] = state_history
 
         return {
             "state": state,
