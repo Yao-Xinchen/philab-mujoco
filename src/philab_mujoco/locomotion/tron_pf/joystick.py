@@ -24,7 +24,7 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
         action_num=6,
         action_repeat=1,
         action_scale=0.5,
-        history_len=1,
+        history_len=10,
         soft_joint_pos_limit_factor=0.95,
         noise_config=config_dict.create(
             level=1.0,  # Set to 0.0 to disable noise.
@@ -53,14 +53,14 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
                 energy=0.0,
                 joint_acc=-2.5e-7,
                 # Feet related rewards.
-                feet_distance=-100.0,
-                feet_regulation=-0.05,
+                feet_distance=-50.0,
+                feet_regulation=-0.0,
                 feet_landing_vel=-0.15,
                 feet_clearance=0.0,
-                feet_air_time=1.0,
+                feet_air_time=2.0,
                 feet_slip=-0.25,
                 feet_height=0.0,
-                feet_phase=0.5,
+                feet_phase=1.0,
                 # Other rewards.
                 stand_still=0.0,
                 alive=0.0,
@@ -74,7 +74,7 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
             tracking_sigma=0.4,
             max_foot_height=0.1,
             base_height_target=0.5,
-            min_feet_distance=0.115,
+            min_feet_distance=0.1,
             about_landing_threshold=0.08,
         ),
         push_config=config_dict.create(
@@ -172,7 +172,7 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         self._qpos_noise_scale = jp.array(qpos_noise_scale)
 
         # state history buffer size
-        self._state_history_len = 10
+        self._state_history_len = self._config.history_len
 
     def reset(self, rng: jax.Array) -> mjx_env.State:
         qpos = self._init_q
