@@ -17,14 +17,14 @@ def tron_wf_randomize(model: mjx.Model, rng: jax.Array):
         # Scale static friction: *U(0.8, 1.2).
         _rng, _key = jax.random.split(_rng)
         _frictionloss = model.dof_frictionloss[6:] * jax.random.uniform(
-            _key, shape=(6,), minval=0.8, maxval=1.2
+            _key, shape=(8,), minval=0.8, maxval=1.2
         )
         dof_frictionloss = model.dof_frictionloss.at[6:].set(_frictionloss)
 
         # Scale armature: *U(1.0, 1.05).
         _rng, _key = jax.random.split(_rng)
         _armature = model.dof_armature[6:] * jax.random.uniform(
-            _key, shape=(6,), minval=1.0, maxval=1.05
+            _key, shape=(8,), minval=1.0, maxval=1.05
         )
         dof_armature = model.dof_armature.at[6:].set(_armature)
 
@@ -47,7 +47,7 @@ def tron_wf_randomize(model: mjx.Model, rng: jax.Array):
         _qpos0 = model.qpos0
         _qpos0 = _qpos0.at[7:].set(
             _qpos0[7:]
-            + jax.random.uniform(_key, shape=(6,), minval=-0.07, maxval=0.07)
+            + jax.random.uniform(_key, shape=(8,), minval=-0.07, maxval=0.07)
         )
 
         return (

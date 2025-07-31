@@ -1,7 +1,7 @@
 from etils import epath
 from philab_mujoco import ROBOT_PATH
 
-XML = ROBOT_PATH / "PF_TRON1A" / "xml" / "robot.xml"
+XML = ROBOT_PATH / "WF_TRON1A" / "xml" / "robot.xml"
 
 def task_to_xml(task_name: str) -> epath.Path:
     return XML
@@ -14,11 +14,11 @@ FEET_SITES = [
 ]
 
 LEFT_FEET_GEOMS = [
-    "foot_L_collision",
+    "wheel_L_collision",
 ]
 
 RIGHT_FEET_GEOMS = [
-    "foot_R_collision",
+    "wheel_R_collision",
 ]
 
 FEET_GEOMS = LEFT_FEET_GEOMS + RIGHT_FEET_GEOMS

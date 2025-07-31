@@ -21,9 +21,10 @@ def tron_wf_joystick_config() -> config_dict.ConfigDict:
         ctrl_dt=0.02,
         sim_dt=0.002,
         episode_length=1000,
-        action_num=6,
+        action_num=8,
         action_repeat=1,
-        action_scale=0.5,
+        action_scale_pos=0.5,
+        action_scale_vel=2.0,
         history_len=10,
         soft_joint_pos_limit_factor=0.95,
         noise_config=config_dict.create(
@@ -53,14 +54,8 @@ def tron_wf_joystick_config() -> config_dict.ConfigDict:
                 energy=0.0,
                 joint_acc=-2.5e-7,
                 # Feet related rewards.
+                feet_contact=0.001,
                 feet_distance=-50.0,
-                feet_regulation=-0.0,
-                feet_landing_vel=-0.15,
-                feet_clearance=0.0,
-                feet_air_time=2.0,
-                feet_slip=-0.25,
-                feet_height=0.0,
-                feet_phase=1.0,
                 # Other rewards.
                 stand_still=0.0,
                 alive=0.0,
@@ -80,10 +75,10 @@ def tron_wf_joystick_config() -> config_dict.ConfigDict:
         push_config=config_dict.create(
             enable=True,
             interval_range=[5.0, 10.0],
-            magnitude_range=[0.1, 3.0],
+            magnitude_range=[0.1, 2.0],
         ),
-        lin_vel_x=[-1.0, 1.5],
-        lin_vel_y=[-1.0, 1.0],
+        lin_vel_x=[-1.5, 1.5],
+        lin_vel_y=[-0.0, 0.0],
         ang_vel_yaw=[-1.0, 1.0],
         gait_freq_range=[1.5, 2.5],
     )
@@ -106,6 +101,7 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
     def _post_init(self):
         self._init_q = jp.array(self._mj_model.keyframe("home").qpos)
         self._default_pose = jp.array(self._mj_model.keyframe("home").qpos[7:])
+        self._motor_targets = self._default_pose
 
         # joint limits
         self._lowers, self._uppers = self.mj_model.jnt_range[1:].T  # first joint is free
@@ -124,7 +120,7 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
                 hip_indices.append(
                     self._mj_model.joint(f"{joint_name}_{side}_Joint").qposadr - 7
                 )
-            self._hip_indices = jp.array(hip_indices)
+        self._hip_indices = jp.array(hip_indices)
 
         knee_indices = []
         knee_joint_names = ["knee"]
@@ -133,11 +129,25 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
                 knee_indices.append(
                     self._mj_model.joint(f"{joint_name}_{side}_Joint").qposadr - 7
                 )
-            self._knee_indices = jp.array(knee_indices)
+        self._knee_indices = jp.array(knee_indices)
+
+        wheel_indices = []
+        wheel_joint_names = ["wheel"]
+        for side in side_names:
+            for joint_name in wheel_joint_names:
+                wheel_indices.append(
+                    self._mj_model.joint(f"{joint_name}_{side}_Joint").qposadr - 7
+                )
+        self._wheel_indices = jp.array(wheel_indices)
+
+        self._vel_indices = self._wheel_indices
+        self._pos_indices = jp.array(
+            [i for i in range(self._mj_model.nu) if i not in self._vel_indices]
+        )
 
         self._weights = jp.array([
-            1.0, 0.01, 0.01,
-            1.0, 0.01, 0.01,
+            1.0, 0.01, 0.01, 0.0,
+            1.0, 0.01, 0.01, 0.0,
         ])  # encourage movement on hips and knees
 
         # link indices
@@ -165,8 +175,8 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
 
         # noise scales
         qpos_noise_scale = np.zeros(self._config.action_num)
-        hip_ids = [0, 1, 3, 4]
-        knee_ids = [2, 5]
+        hip_ids = [0, 1, 4, 5]
+        knee_ids = [2, 6]
         qpos_noise_scale[hip_ids] = self._config.noise_config.scales.hip_pos
         qpos_noise_scale[knee_ids] = self._config.noise_config.scales.knee_pos
         self._qpos_noise_scale = jp.array(qpos_noise_scale)
@@ -177,6 +187,8 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
     def reset(self, rng: jax.Array) -> mjx_env.State:
         qpos = self._init_q
         qvel = jp.zeros(self.mjx_model.nv)
+
+        self._motor_targets = self._default_pose
 
         # x=+U(-0.5, 0.5), y=+U(-0.5, 0.5), yaw=U(-3.14, 3.14).
         rng, key = jax.random.split(rng)
@@ -196,21 +208,11 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
 
         # d(xyzrpy)=U(-0.5, 0.5)
         rng, key = jax.random.split(rng)
-        qvel = qvel.at[0:6].set(
-            jax.random.uniform(key, (6,), minval=-0.5, maxval=0.5)
+        qvel = qvel.at[0:8].set(
+            jax.random.uniform(key, (8,), minval=-0.5, maxval=0.5)
         )
 
         data = mjx_env.init(self.mjx_model, qpos=qpos, qvel=qvel, ctrl=qpos[7:])
-
-        # Phase, freq=U(1.0, 1.5)
-        rng, key = jax.random.split(rng)
-        gait_freq = jax.random.uniform(
-            key, (1,),
-            minval=self._config.gait_freq_range[0],
-            maxval=self._config.gait_freq_range[1]
-        )
-        phase_dt = 2 * jp.pi * self.dt * gait_freq
-        phase = jp.array([0, jp.pi])
 
         rng, cmd_rng = jax.random.split(rng)
         cmd = self.sample_command(cmd_rng)
@@ -231,13 +233,6 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
             "last_act": jp.zeros(self.mjx_model.nu),
             "last_last_act": jp.zeros(self.mjx_model.nu),
             "motor_targets": jp.zeros(self.mjx_model.nu),
-            "feet_air_time": jp.zeros(2),
-            "last_contact": jp.zeros(2, dtype=bool),
-            "swing_peak": jp.zeros(2),
-            # Phase related.
-            "phase_dt": phase_dt,
-            "phase": phase,
-            "gait_freq": gait_freq,
             # Push related.
             "push": jp.array([0.0, 0.0]),
             "push_step": 0,
@@ -284,29 +279,37 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
         data = state.data.replace(qvel=qvel)
         state = state.replace(data=data)
 
-        motor_targets = self._default_pose + action * self._config.action_scale
-        data = mjx_env.step(
-            self.mjx_model, state.data, motor_targets, self.n_substeps
+        # motor_targets = self._default_pose + action * self._config.action_scale
+        self._motor_targets = (
+            self._motor_targets.at[self._pos_indices].set(
+                self._default_pose[self._pos_indices]
+                + action[self._pos_indices] * self._config.action_scale_pos
+            )
         )
-        state.info["motor_targets"] = motor_targets
+
+        self._motor_targets = (
+            self._motor_targets.at[self._vel_indices].set(
+                self._motor_targets.at[self._vel_indices].get()
+                + action[self._vel_indices] * self._config.action_scale_vel * self.dt
+            )
+        )  # integrate velocities
+
+        data = mjx_env.step(
+            self.mjx_model, state.data, self._motor_targets, self.n_substeps
+        )
+        state.info["motor_targets"] = self._motor_targets
 
         contact = jp.array([
             geoms_colliding(data, geom_id, self._floor_geom_id)
             for geom_id in self._feet_geom_id
         ])
-        contact_filt = contact | state.info["last_contact"]
-        first_contact = (state.info["feet_air_time"] > 0.0) * contact_filt
-        state.info["feet_air_time"] += self.dt
-        p_f = data.site_xpos[self._feet_site_id]
-        p_fz = p_f[..., -1]
-        state.info["swing_peak"] = jp.maximum(state.info["swing_peak"], p_fz)
 
         obs = self._get_obs(data, state.info, contact)
 
         done = self._get_termination(data)
 
         rewards = self._get_reward(
-            data, action, state.info, state.metrics, done, first_contact, contact
+            data, action, state.info, state.metrics, done, contact
         )
         rewards = {
             k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
@@ -316,8 +319,6 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
         state.info["push"] = push
         state.info["step"] += 1
         state.info["push_step"] += 1
-        phase_tp1 = state.info["phase"] + state.info["phase_dt"]
-        state.info["phase"] = jp.fmod(phase_tp1 + jp.pi, 2 * jp.pi) - jp.pi
         state.info["last_last_act"] = state.info["last_act"]
         state.info["last_act"] = action
         state.info["rng"], cmd_rng = jax.random.split(state.info["rng"])
@@ -331,12 +332,6 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
             0,
             state.info["step"],
         )
-        state.info["feet_air_time"] *= ~contact
-        state.info["last_contact"] = contact
-        state.info["swing_peak"] *= ~contact
-        for k, v in rewards.items():
-            state.metrics[f"reward/{k}"] = v
-        state.metrics["swing_peak"] = jp.mean(state.info["swing_peak"])
 
         done = done.astype(reward.dtype)
         state = state.replace(data=data, obs=obs, reward=reward, done=done)
@@ -378,7 +373,7 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
                 * self._qpos_noise_scale
         )
 
-        joint_vel = data.qvel[6:]
+        joint_vel = data.qvel[8:]
         info["rng"], noise_rng = jax.random.split(info["rng"])
         noisy_joint_vel = (
                 joint_vel
@@ -387,28 +382,16 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
                 * self._config.noise_config.scales.joint_vel
         )
 
-        cos = jp.cos(info["phase"])
-        sin = jp.sin(info["phase"])
-        phase = jp.concatenate([cos, sin])
-
         linvel = self.get_local_linvel(data)
         info["rng"], noise_rng = jax.random.split(info["rng"])
-        noisy_linvel = (
-                linvel
-                + (2 * jax.random.uniform(noise_rng, shape=linvel.shape) - 1)
-                * self._config.noise_config.level
-                * self._config.noise_config.scales.linvel
-        )
 
         state = jp.hstack([
-            # noisy_linvel,  # 3
             noisy_gyro,  # 3
             noisy_gravity,  # 3
             info["command"],  # 3
-            noisy_joint_angles - self._default_pose,  # 6
-            noisy_joint_vel,  # 6
-            info["last_act"],  # 6
-            phase,
+            noisy_joint_angles - self._default_pose,  # 8
+            noisy_joint_vel,  # 8
+            info["last_act"],  # 8
         ])
 
         accelerometer = self.get_accelerometer(data)
@@ -426,11 +409,9 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
             joint_angles - self._default_pose,
             joint_vel,
             root_height,  # 1
-            data.actuator_force,  # 6
+            data.actuator_force,  # 8
             contact,  # 2
             feet_vel,  # 2*3
-            info["feet_air_time"],  # 2
-            info["gait_freq"],
         ])
 
         prev_state_history = info.get(
@@ -458,7 +439,6 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
             info: dict[str, Any],
             metrics: dict[str, Any],
             done: jax.Array,
-            first_contact: jax.Array,
             contact: jax.Array,
     ) -> dict[str, jax.Array]:
         del metrics  # Unused.
@@ -486,23 +466,8 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
             "energy": self._cost_energy(data.qvel[6:], data.actuator_force),
             "joint_acc": self._cost_joint_acc(data.qacc[6:]),
             # Feet related rewards.
+            "feet_contact": self._reward_feet_contact(contact),
             "feet_distance": self._cost_feet_distance(data),
-            "feet_regulation": self._cost_feet_regulation(data),
-            "feet_landing_vel": self._cost_feet_landing_vel(data, contact),
-            "feet_slip": self._cost_feet_slip(data, contact, info),
-            "feet_clearance": self._cost_feet_clearance(data, info),
-            "feet_height": self._cost_feet_height(
-                info["swing_peak"], first_contact, info
-            ),
-            "feet_air_time": self._reward_feet_air_time(
-                info["feet_air_time"], first_contact, info["command"]
-            ),
-            "feet_phase": self._reward_feet_phase(
-                data,
-                info["phase"],
-                self._config.reward_config.max_foot_height,
-                info["command"],
-            ),
             # Other rewards.
             "alive": self._reward_alive(),
             "termination": self._cost_termination(done),
@@ -533,28 +498,6 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
     ) -> jax.Array:
         ang_vel_error = jp.square(commands[2] - ang_vel[2])
         return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
-
-    # def _reward_stay_still(
-    #         self,
-    #         commands: jax.Array,
-    #         local_vel: jax.Array,
-    #         ang_vel: jax.Array,
-    # ) -> jax.Array:
-    #     cmd_norm = jp.linalg.norm(commands)
-    #
-    #     # Only apply this reward when commands are near zero
-    #     is_stationary_cmd = cmd_norm < 0.1
-    #
-    #     # Penalize any movement when commands are zero
-    #     lin_vel_penalty = jp.sum(jp.square(local_vel[:2]))
-    #     ang_vel_penalty = jp.square(ang_vel[2])
-    #
-    #     # Use a steep exponential to heavily penalize movement when stationary
-    #     movement_penalty = lin_vel_penalty + ang_vel_penalty
-    #     reward = jp.exp(-movement_penalty / 0.01)  # Very steep curve
-    #
-    #     # Only apply reward when commands are near zero
-    #     return jp.where(is_stationary_cmd, reward, jp.array(0.0))
 
     # Base-related rewards.
 
@@ -636,100 +579,13 @@ class TronWfJoystickEnv(base.TronWfBaseEnv):
 
     # Feet related rewards.
 
+    def _reward_feet_contact(self, contact: jax.Array) -> jax.Array:
+        return jp.sum(contact)
+
     def _cost_feet_distance(self, data: mjx.Data) -> jax.Array:
         feet_pos = data.site_xpos[self._feet_site_id]
         feet_dist = jp.linalg.norm(feet_pos[0] - feet_pos[1])
         reward = jp.clip(self._config.reward_config.min_feet_distance - feet_dist, 0.0, 1.0)
-        return reward
-
-    def _cost_feet_regulation(self, data: mjx.Data) -> jax.Array:
-        feet_height = self._config.reward_config.base_height_target * 0.001
-        foot_heights = data.site_xpos[self._feet_site_id, 2]  # z-coordinates of feet
-        foot_velocities = data.sensordata[self._foot_linvel_sensor_adr]  # foot linear velocities
-        foot_velocities_xy = foot_velocities[:, :2]  # only x-y components
-
-        cost = jp.sum(
-            jp.exp(-foot_heights / feet_height)
-            * jp.square(jp.linalg.norm(foot_velocities_xy, axis=-1))
-        )
-        return cost
-
-    def _cost_feet_landing_vel(self, data: mjx.Data, contact: jax.Array) -> jax.Array:
-        foot_velocities = data.sensordata[self._foot_linvel_sensor_adr]  # foot linear velocities
-        z_vels = foot_velocities[:, 2]  # z-components of foot velocities
-        foot_heights = data.site_xpos[self._feet_site_id, 2]  # z-coordinates of feet
-
-        # Check if feet are about to land: low height, not in contact, and moving downward
-        about_to_land = (
-                (foot_heights < self._config.reward_config.about_landing_threshold)
-                & (~contact)
-                & (z_vels < 0.0)
-        )
-
-        # Only penalize downward velocities when about to land
-        landing_z_vels = jp.where(about_to_land, z_vels, jp.zeros_like(z_vels))
-        cost = jp.sum(jp.square(landing_z_vels))
-        return cost
-
-    def _cost_feet_slip(
-            self, data: mjx.Data, contact: jax.Array, info: dict[str, Any]
-    ) -> jax.Array:
-        del info  # Unused.
-        body_vel = self.get_global_linvel(data)[:2]
-        reward = jp.sum(jp.linalg.norm(body_vel, axis=-1) * contact)
-        return reward
-
-    def _cost_feet_clearance(
-            self, data: mjx.Data, info: dict[str, Any]
-    ) -> jax.Array:
-        del info  # Unused.
-        feet_vel = data.sensordata[self._foot_linvel_sensor_adr]
-        vel_xy = feet_vel[..., :2]
-        vel_norm = jp.sqrt(jp.linalg.norm(vel_xy, axis=-1))
-        foot_pos = data.site_xpos[self._feet_site_id]
-        foot_z = foot_pos[..., -1]
-        delta = jp.abs(foot_z - self._config.reward_config.max_foot_height)
-        return jp.sum(delta * vel_norm)
-
-    def _cost_feet_height(
-            self,
-            swing_peak: jax.Array,
-            first_contact: jax.Array,
-            info: dict[str, Any],
-    ) -> jax.Array:
-        del info  # Unused.
-        error = swing_peak / self._config.reward_config.max_foot_height - 1.0
-        return jp.sum(jp.square(error) * first_contact)
-
-    def _reward_feet_air_time(
-            self,
-            air_time: jax.Array,
-            first_contact: jax.Array,
-            commands: jax.Array,
-            threshold_min: float = 0.2,
-            threshold_max: float = 0.5,
-    ) -> jax.Array:
-        cmd_norm = jp.linalg.norm(commands)
-        air_time = (air_time - threshold_min) * first_contact
-        air_time = jp.clip(air_time, max=threshold_max - threshold_min)
-        reward = jp.sum(air_time)
-        reward *= cmd_norm > 0.1  # No reward for zero commands.
-        return reward
-
-    def _reward_feet_phase(
-            self,
-            data: mjx.Data,
-            phase: jax.Array,
-            foot_height: jax.Array,
-            commands: jax.Array,
-    ) -> jax.Array:
-        # Reward for tracking the desired foot height.
-        del commands  # Unused.
-        foot_pos = data.site_xpos[self._feet_site_id]
-        foot_z = foot_pos[..., -1]
-        rz = gait.get_rz(phase, swing_height=foot_height)
-        error = jp.sum(jp.square(foot_z - rz))
-        reward = jp.exp(-error / 0.01)
         return reward
 
     def sample_command(self, rng: jax.Array) -> jax.Array:

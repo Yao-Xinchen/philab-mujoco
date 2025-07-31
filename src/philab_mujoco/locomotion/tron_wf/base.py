@@ -16,7 +16,7 @@ from philab_mujoco.locomotion.tron_pf import constants as consts
 
 def get_assets() -> Dict[str, bytes]:
     assets = {}
-    path = ROBOT_PATH / "PF_TRON1A"
+    path = ROBOT_PATH / "WF_TRON1A"
     mjx_env.update_assets(assets, path / "xml", "*.xml")
     mjx_env.update_assets(assets, path / "meshes")
     return assets
