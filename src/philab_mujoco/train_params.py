@@ -30,7 +30,7 @@ def brax_ppo_config(env_name: str) -> config_dict.ConfigDict:
         ),
     )
 
-    if env_name in ("TronSfJoystick", "TronPfJoystick"):
+    if env_name in ("TronSfJoystick", "TronPfJoystick", "TronWFJoystick"):
         rl_config.num_timesteps = 500_000_000
         rl_config.num_evals = 25
         rl_config.clipping_epsilon = 0.2

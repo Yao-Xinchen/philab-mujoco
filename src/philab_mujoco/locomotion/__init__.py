@@ -13,6 +13,9 @@ from philab_mujoco.locomotion.tron_sf.randomize import tron_sf_randomize
 from philab_mujoco.locomotion.tron_pf.joystick import TronPfJoystickEnv, tron_pf_joystick_config
 from philab_mujoco.locomotion.tron_pf.randomize import tron_pf_randomize
 
+from philab_mujoco.locomotion.tron_wf.joystick import TronWfJoystickEnv, tron_wf_joystick_config
+from philab_mujoco.locomotion.tron_wf.randomize import tron_wf_randomize
+
 # ==============================================================================
 # register environments
 
@@ -24,18 +27,26 @@ _envs = {
     "TronPfJoystick": functools.partial(
         TronPfJoystickEnv, task="flat_terrain"
     ),
+
+    "TronWfJoystick": functools.partial(
+        TronWfJoystickEnv, task="flat_terrain"
+    ),
 }
 
 _cfgs = {
     "TronSfJoystick": tron_sf_joystick_config,
 
     "TronPfJoystick": tron_pf_joystick_config,
+
+    "TronWfJoystick": tron_wf_joystick_config,
 }
 
 _randomizer = {
     "TronSfJoystick": tron_sf_randomize,
 
     "TronPfJoystick": tron_pf_randomize,
+
+    "TronWfJoystick": tron_wf_randomize,
 }
 
 
