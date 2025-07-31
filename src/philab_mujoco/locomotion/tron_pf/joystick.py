@@ -40,8 +40,8 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
         reward_config=config_dict.create(
             scales=config_dict.create(
                 # Tracking related rewards.
-                tracking_lin_vel=1.0,
-                tracking_ang_vel=0.5,
+                tracking_lin_vel=1.5,
+                tracking_ang_vel=0.7,
                 # Base related rewards.
                 lin_vel_z=-0.5,
                 ang_vel_xy=-0.05,
@@ -66,23 +66,23 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
                 alive=0.0,
                 termination=-1.0,
                 # Pose related rewards.
-                joint_deviation_knee=-0.1,
-                joint_deviation_hip=-0.25,
+                joint_deviation_knee=-0.05,
+                joint_deviation_hip=-0.15,
                 dof_pos_limits=-2.0,
                 pose=-1.0,
             ),
-            tracking_sigma=0.4,
+            tracking_sigma=0.25,
             max_foot_height=0.1,
             base_height_target=0.5,
-            min_feet_distance=0.1,
+            min_feet_distance=0.07,
             about_landing_threshold=0.08,
         ),
         push_config=config_dict.create(
             enable=True,
             interval_range=[5.0, 10.0],
-            magnitude_range=[0.1, 2.0],
+            magnitude_range=[0.1, 3.0],
         ),
-        lin_vel_x=[-1.0, 1.0],
+        lin_vel_x=[-1.0, 1.5],
         lin_vel_y=[-1.0, 1.0],
         ang_vel_yaw=[-1.0, 1.0],
         gait_freq_range=[1.5, 2.5],

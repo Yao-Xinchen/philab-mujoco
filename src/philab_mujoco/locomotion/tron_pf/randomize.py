@@ -14,10 +14,10 @@ def tron_pf_randomize(model: mjx.Model, rng: jax.Array):
             jax.random.uniform(_key, minval=0.4, maxval=1.0)
         )
 
-        # Scale static friction: *U(0.9, 1.1).
+        # Scale static friction: *U(0.8, 1.2).
         _rng, _key = jax.random.split(_rng)
         _frictionloss = model.dof_frictionloss[6:] * jax.random.uniform(
-            _key, shape=(6,), minval=0.9, maxval=1.1
+            _key, shape=(6,), minval=0.8, maxval=1.2
         )
         dof_frictionloss = model.dof_frictionloss.at[6:].set(_frictionloss)
 
@@ -42,12 +42,12 @@ def tron_pf_randomize(model: mjx.Model, rng: jax.Array):
             _body_mass[TORSO_BODY_ID] + _dmass
         )
 
-        # Jitter qpos0: +U(-0.05, 0.05).
+        # Jitter qpos0: +U(-0.07, 0.07).
         _rng, _key = jax.random.split(_rng)
         _qpos0 = model.qpos0
         _qpos0 = _qpos0.at[7:].set(
             _qpos0[7:]
-            + jax.random.uniform(_key, shape=(6,), minval=-0.05, maxval=0.05)
+            + jax.random.uniform(_key, shape=(6,), minval=-0.07, maxval=0.07)
         )
 
         return (
