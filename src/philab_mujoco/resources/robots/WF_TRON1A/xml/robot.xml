@@ -1,4 +1,4 @@
-<mujoco model="wheel_biped">
+<mujoco model="wheel_foot">
     <compiler angle="radian" meshdir="../meshes/" />
 
     <option iterations="3" ls_iterations="5" timestep="0.002" integrator="Euler">
@@ -12,15 +12,14 @@
             <joint axis="0 0 1" damping="1.5"/>
 
             <default class="tron/joint">
-                <default class="tron/joint/position">
-                    <joint armature="0.01" frictionloss="0.3" actuatorfrcrange="-80 80"/>
-                    <position kp="45" kv="1.5"/>
-                </default>
+                <joint armature="0.01" frictionloss="0.3" actuatorfrcrange="-30 30"/>
+                <position kp="45" kv="1.5"/>
+            </default>
 
-                <default class="tron/joint/velocity">
-                    <joint armature="0.01" frictionloss="0.01" actuatorfrcrange="-40 40"/>
-                    <position kp="10" kv="0.8"/>
-                </default>
+
+            <default class="tron/joint_vel">
+                <joint armature="0.01" frictionloss="0.01" actuatorfrcrange="-30 30"/>
+                <velocity kv="0.8"/>
             </default>
 
             <default class="tron/visual">
@@ -64,7 +63,6 @@
         <texture name="texplane" type="2d" builtin="checker" rgb1="0.35 0.35 0.35" rgb2="0.55 0.55 0.55" width="512" height="512" mark="cross" markrgb=".8 .8 .8"/>
         <material name="matplane" reflectance="0.0" texture="texplane" texrepeat="1 1" texuniform="true"/>
     </asset>
-        <option timestep="0.001"/>
 
     <worldbody>
         <geom name="floor" rgba="0.5 0.6 0.7 1" pos="0 0 0" size="0 0 0.25" type="plane" material="matplane" condim="3"/>
@@ -138,14 +136,14 @@
     </worldbody>
 
     <actuator>
-        <position class="tron/joint/position"  name="abad_L_Joint"   joint="abad_L_Joint"  />
-        <position class="tron/joint/position"  name="hip_L_Joint"    joint="hip_L_Joint"   />
-        <position class="tron/joint/position"  name="knee_L_Joint"   joint="knee_L_Joint"  />
-        <position class="tron/joint/velocity"  name="wheel_L_Joint"  joint="wheel_L_Joint" />
-        <position class="tron/joint/position"  name="abad_R_Joint"   joint="abad_R_Joint"  />
-        <position class="tron/joint/position"  name="hip_R_Joint"    joint="hip_R_Joint"   />
-        <position class="tron/joint/position"  name="knee_R_Joint"   joint="knee_R_Joint"  />
-        <position class="tron/joint/velocity"  name="wheel_R_Joint"  joint="wheel_R_Joint" />
+        <position class="tron/joint"  name="abad_L_Joint"   joint="abad_L_Joint"  />
+        <position class="tron/joint"  name="hip_L_Joint"    joint="hip_L_Joint"   />
+        <position class="tron/joint"  name="knee_L_Joint"   joint="knee_L_Joint"  />
+        <velocity class="tron/joint_vel"  name="wheel_L_Joint"  joint="wheel_L_Joint" />
+        <position class="tron/joint"  name="abad_R_Joint"   joint="abad_R_Joint"  />
+        <position class="tron/joint"  name="hip_R_Joint"    joint="hip_R_Joint"   />
+        <position class="tron/joint"  name="knee_R_Joint"   joint="knee_R_Joint"  />
+        <velocity class="tron/joint_vel"  name="wheel_R_Joint"  joint="wheel_R_Joint" />
     </actuator>
 
     <sensor>

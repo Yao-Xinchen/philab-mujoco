@@ -11,7 +11,7 @@ from mujoco._structs import MjModel
 from mujoco_playground._src import mjx_env
 
 from philab_mujoco import ROBOT_PATH
-from philab_mujoco.locomotion.tron_pf import constants as consts
+from philab_mujoco.locomotion.tron_wf import constants as consts
 
 
 def get_assets() -> Dict[str, bytes]:

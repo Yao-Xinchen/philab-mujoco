@@ -124,7 +124,7 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
                 hip_indices.append(
                     self._mj_model.joint(f"{joint_name}_{side}_Joint").qposadr - 7
                 )
-            self._hip_indices = jp.array(hip_indices)
+        self._hip_indices = jp.array(hip_indices)
 
         knee_indices = []
         knee_joint_names = ["knee"]
@@ -133,7 +133,7 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
                 knee_indices.append(
                     self._mj_model.joint(f"{joint_name}_{side}_Joint").qposadr - 7
                 )
-            self._knee_indices = jp.array(knee_indices)
+        self._knee_indices = jp.array(knee_indices)
 
         self._weights = jp.array([
             1.0, 0.01, 0.01,
