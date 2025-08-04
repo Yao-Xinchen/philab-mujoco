@@ -20,7 +20,6 @@ import json
 import os
 import time
 import warnings
-import pickle
 
 from absl import app
 from absl import flags
@@ -28,11 +27,13 @@ from absl import logging
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
 from etils import epath
+from flax.training import orbax_utils
 import jax
 import jax.numpy as jp
 import mediapy as media
 from ml_collections import config_dict
 import mujoco
+from orbax import checkpoint as ocp
 from tensorboardX import SummaryWriter
 import wandb
 
@@ -79,7 +80,7 @@ _USE_WANDB = flags.DEFINE_boolean(
     "Use Weights & Biases for logging (ignored in play-only mode)",
 )
 _USE_TB = flags.DEFINE_boolean(
-    "use_tb", False, "Use TensorBoard for logging (ignored in play-only mode)"
+    "use_tb", True, "Use TensorBoard for logging (ignored in play-only mode)"
 )
 _DOMAIN_RANDOMIZATION = flags.DEFINE_boolean(
     "domain_randomization", False, "Use domain randomization"
@@ -128,32 +129,40 @@ _POLICY_OBS_KEY = flags.DEFINE_string(
     "policy_obs_key", "state", "Policy obs key"
 )
 _VALUE_OBS_KEY = flags.DEFINE_string("value_obs_key", "state", "Value obs key")
-_RSCOPE_ENVS = flags.DEFINE_integer(
-    "rscope_envs",
-    None,
-    "Number of parallel environment rollouts to save for the rscope viewer",
+
+# APG pa
+_APG_UPDATE_FREQUENCY = flags.DEFINE_integer(
+    "apg_update_frequency", 100, "Frequency of APG updates. 0 to disable."
 )
-_DETERMINISTIC_RSCOPE = flags.DEFINE_boolean(
-    "deterministic_rscope",
-    True,
-    "Run deterministic rollouts for the rscope viewer",
+_APG_HORIZON_LENGTH = flags.DEFINE_integer(
+    "apg_horizon_length",
+    32,
+    "Horizon for APG rollouts.",
 )
-_RUN_EVALS = flags.DEFINE_boolean(
-    "run_evals",
-    True,
-    "Run evaluation rollouts between policy updates.",
+_APG_LEARNING_RATE = flags.DEFINE_float(
+    "apg_learning_rate",
+    5e-4,
+    "Learning rate for APG. If None, uses PPO learning rate.",
 )
-_LOG_TRAINING_METRICS = flags.DEFINE_boolean(
-    "log_training_metrics",
-    False,
-    "Whether to log training metrics and callback to progress_fn. Significantly"
-    " slows down training if too frequent.",
+_APG_DISCOUNT_FACTOR = flags.DEFINE_float(
+    "apg_discount_factor",
+    0.9,
+    "Discount factor for APG returns.",
 )
-_TRAINING_METRICS_STEPS = flags.DEFINE_integer(
-    "training_metrics_steps",
-    1_000_000,
-    "Number of steps between logging training metrics. Increase if training"
-    " experiences slowdown.",
+_APG_NUM_ENV = flags.DEFINE_integer(
+    "apg_num_env",
+    16,
+    "Number of parallel environments for APG rollouts.",
+)
+_APG_NUM_UPDATES_PER_BATCH = flags.DEFINE_integer(
+    "apg_num_updates_per_batch",
+    1,
+    "Number of times to reuse APG data for updates.",
+)
+_APG_STOP_ENV_STEP = flags.DEFINE_integer(
+    "apg_stop_env_step",
+    20_000_000,
+    "Number of environment steps to stop APG updates.",
 )
 
 
@@ -162,24 +171,6 @@ def get_rl_config(env_name: str) -> config_dict.ConfigDict:
         return philab_mujoco.train_params.brax_ppo_config(env_name)
 
     raise ValueError(f"Env {env_name} not found in {registry.ALL_ENVS}.")
-
-
-def rscope_fn(full_states, obs, rew, done):
-    """
-    All arrays are of shape (unroll_length, rscope_envs, ...)
-    full_states: dict with keys 'qpos', 'qvel', 'time', 'metrics'
-    obs: nd.array or dict obs based on env configuration
-    rew: nd.array rewards
-    done: nd.array done flags
-    """
-    # Calculate cumulative rewards per episode, stopping at first done flag
-    done_mask = jp.cumsum(done, axis=0)
-    valid_rewards = rew * (done_mask == 0)
-    episode_rewards = jp.sum(valid_rewards, axis=0)
-    print(
-        "Collected rscope rollouts with reward"
-        f" {episode_rewards.mean():.3f} +- {episode_rewards.std():.3f}"
-    )
 
 
 def main(argv):
@@ -240,13 +231,24 @@ def main(argv):
         ppo_params.network_factory.policy_obs_key = _POLICY_OBS_KEY.value
     if _VALUE_OBS_KEY.present:
         ppo_params.network_factory.value_obs_key = _VALUE_OBS_KEY.value
+
+    # Add APG parameters to the config
+    if _APG_UPDATE_FREQUENCY.present:
+        ppo_params.apg_update_frequency = _APG_UPDATE_FREQUENCY.value
+    if _APG_HORIZON_LENGTH.present:
+        ppo_params.apg_horizon_length = _APG_HORIZON_LENGTH.value
+    if _APG_LEARNING_RATE.present:
+        ppo_params.apg_learning_rate = _APG_LEARNING_RATE.value
+    if _APG_DISCOUNT_FACTOR.present:
+        ppo_params.apg_discount_factor = _APG_DISCOUNT_FACTOR.value
+    if _APG_NUM_ENV.present:
+        ppo_params.apg_num_env = _APG_NUM_ENV.value
+    if _APG_NUM_UPDATES_PER_BATCH.present:
+        ppo_params.apg_num_updates_per_batch = _APG_NUM_UPDATES_PER_BATCH.value
+    if _APG_STOP_ENV_STEP.present:
+        ppo_params.apg_stop_env_step = _APG_STOP_ENV_STEP.value
+
     env = registry.load(_ENV_NAME.value, config=env_cfg)
-    if _RUN_EVALS.present:
-        ppo_params.run_evals = _RUN_EVALS.value
-    if _LOG_TRAINING_METRICS.present:
-        ppo_params.log_training_metrics = _LOG_TRAINING_METRICS.value
-    if _TRAINING_METRICS_STEPS.present:
-        ppo_params.training_metrics_steps = _TRAINING_METRICS_STEPS.value
 
     print(f"Environment Config:\n{env_cfg}")
     print(f"PPO Training Parameters:\n{ppo_params}")
@@ -255,6 +257,16 @@ def main(argv):
     now = datetime.now()
     timestamp = now.strftime("%Y%m%d-%H%M%S")
     exp_name = f"{_ENV_NAME.value}-{timestamp}"
+    # add the apg config into the exp name
+    if ppo_params.apg_update_frequency > 0:
+        exp_name += f"-apg{ppo_params.apg_update_frequency}"
+        exp_name += f"-horizon{ppo_params.apg_horizon_length}"
+        exp_name += f"-lr{ppo_params.apg_learning_rate}"
+        exp_name += f"-discount{ppo_params.apg_discount_factor}"
+        exp_name += f"-num_envs{ppo_params.apg_num_env}"
+        exp_name += f"-num_updates{ppo_params.apg_num_updates_per_batch}"
+        exp_name += f"-stop_step{ppo_params.apg_stop_env_step}"
+
     if _SUFFIX.value is not None:
         exp_name += f"-{_SUFFIX.value}"
     print(f"Experiment name: {exp_name}")
@@ -298,8 +310,19 @@ def main(argv):
     print(f"Checkpoint path: {ckpt_path}")
 
     # Save environment configuration
-    with open(ckpt_path / "config.json", "w", encoding="utf-8") as fp:
+    with open(ckpt_path / "env_config.json", "w", encoding="utf-8") as fp:
         json.dump(env_cfg.to_dict(), fp, indent=4)
+
+    # Save algorithm parameters config
+    with open(ckpt_path / "algo_config.json", "w", encoding="utf-8") as fp:
+        json.dump(ppo_params.to_dict(), fp, indent=4)
+
+    # Define policy parameters function for saving checkpoints
+    def policy_params_fn(current_step, make_policy, params):  # pylint: disable=unused-argument
+        orbax_checkpointer = ocp.PyTreeCheckpointer()
+        save_args = orbax_utils.save_args_from_target(params)
+        path = ckpt_path / f"{current_step}"
+        orbax_checkpointer.save(path, params, force=True, save_args=save_args)
 
     training_params = dict(ppo_params)
     if "network_factory" in training_params:
@@ -328,6 +351,7 @@ def main(argv):
         ppo.train,
         **training_params,
         network_factory=network_factory,
+        policy_params_fn=policy_params_fn,
         seed=_SEED.value,
         restore_checkpoint_path=restore_checkpoint_path,
         save_checkpoint_path=ckpt_path,
@@ -350,50 +374,16 @@ def main(argv):
             for key, value in metrics.items():
                 writer.add_scalar(key, value, num_steps)
             writer.flush()
-        if _RUN_EVALS.value:
-            print(f"{num_steps}: reward={metrics['eval/episode_reward']:.3f}")
-        if _LOG_TRAINING_METRICS.value:
-            if "episode/sum_reward" in metrics:
-                print(
-                    f"{num_steps}: mean episode"
-                    f" reward={metrics['episode/sum_reward']:.3f}"
-                )
+
+        print(f"{num_steps}: reward={metrics['eval/episode_reward']:.3f}")
 
     # Load evaluation environment
     eval_env = registry.load(_ENV_NAME.value, config=env_cfg)
-
-    policy_params_fn = lambda *args: None
-    if _RSCOPE_ENVS.value:
-        # Interactive visualisation of policy checkpoints
-        from rscope import brax as rscope_utils
-
-        rscope_env = registry.load(_ENV_NAME.value, config=env_cfg)
-        rscope_env = wrapper.wrap_for_brax_training(
-            rscope_env,
-            episode_length=ppo_params.episode_length,
-            action_repeat=ppo_params.action_repeat,
-            randomization_fn=training_params.get("randomization_fn"),
-        )
-
-        rscope_handle = rscope_utils.BraxRolloutSaver(
-            rscope_env,
-            ppo_params,
-            False,
-            _RSCOPE_ENVS.value,
-            _DETERMINISTIC_RSCOPE.value,
-            jax.random.PRNGKey(_SEED.value),
-            rscope_fn,
-        )
-
-        def policy_params_fn(current_step, make_policy, params):  # pylint: disable=unused-argument
-            rscope_handle.set_make_policy(make_policy)
-            rscope_handle.dump_rollout(params)
 
     # Train or load the model
     make_inference_fn, params, _ = train_fn(  # pylint: disable=no-value-for-parameter
         environment=env,
         progress_fn=progress,
-        policy_params_fn=policy_params_fn,
         eval_env=eval_env,
     )
 
@@ -407,18 +397,6 @@ def main(argv):
     # Create inference function
     inference_fn = make_inference_fn(params, deterministic=True)
     jit_inference_fn = jax.jit(inference_fn)
-
-    # Save the parameters to a file
-    params_pkl = {
-        "normalizer_params": params[0],
-        "policy_params": params[1],
-        "value_params": params[2],
-    }
-    with open(logdir / "params.pkl", "wb") as f:
-        pickle.dump(params_pkl, f)
-    print(f"Parameters saved to {logdir / 'params.pkl'}")
-
-    # Use src/philab_mujoco/utilities/export.ipynb to export the policy to ONNX format
 
     # Prepare for evaluation
     eval_env = registry.load(_ENV_NAME.value, config=env_cfg)
@@ -456,7 +434,7 @@ def main(argv):
     scene_option.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = False
 
     frames = eval_env.render(
-        traj, height=2160, width=3840, scene_option=scene_option
+        traj, height=480, width=640, scene_option=scene_option
     )
     media.write_video("rollout.mp4", frames, fps=fps)
     print("Rollout video saved as 'rollout.mp4'.")
