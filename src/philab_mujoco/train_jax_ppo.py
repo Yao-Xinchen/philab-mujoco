@@ -36,6 +36,7 @@ import mujoco
 from orbax import checkpoint as ocp
 from tensorboardX import SummaryWriter
 import wandb
+import pickle
 
 # from mujoco_playground import registry
 from mujoco_playground import wrapper
@@ -397,6 +398,16 @@ def main(argv):
     # Create inference function
     inference_fn = make_inference_fn(params, deterministic=True)
     jit_inference_fn = jax.jit(inference_fn)
+
+    # Save the parameters to a file
+    params_pkl = {
+        "normalizer_params": params[0],
+        "policy_params": params[1],
+        "value_params": params[2],
+    }
+    with open(logdir / "params.pkl", "wb") as f:
+        pickle.dump(params_pkl, f)
+    print(f"Parameters saved to {logdir / 'params.pkl'}")
 
     # Prepare for evaluation
     eval_env = registry.load(_ENV_NAME.value, config=env_cfg)
