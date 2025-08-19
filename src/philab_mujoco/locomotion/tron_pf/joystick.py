@@ -40,8 +40,8 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
         reward_config=config_dict.create(
             scales=config_dict.create(
                 # Tracking related rewards.
-                tracking_lin_vel=1.5,
-                tracking_ang_vel=0.7,
+                tracking_lin_vel=1.0,
+                tracking_ang_vel=0.5,
                 # Base related rewards.
                 lin_vel_z=-0.5,
                 ang_vel_xy=-0.05,
@@ -53,7 +53,7 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
                 energy=0.0,
                 joint_acc=-2.5e-7,
                 # Feet related rewards.
-                feet_distance=-50.0,
+                feet_distance=-100.0,
                 feet_regulation=-0.0,
                 feet_landing_vel=-0.15,
                 feet_clearance=0.0,
@@ -65,6 +65,10 @@ def tron_pf_joystick_config() -> config_dict.ConfigDict:
                 stand_still=0.0,
                 alive=0.0,
                 termination=-1.0,
+                action_smooth=-0.01,
+                keep_balance=1.0,
+                tracking_contacts_shaped_force=-2.0,
+                tracking_contacts_shaped_vel=-2.0,
                 # Pose related rewards.
                 joint_deviation_knee=-0.05,
                 joint_deviation_hip=-0.15,
@@ -507,6 +511,16 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
             "alive": self._reward_alive(),
             "termination": self._cost_termination(done),
             "stand_still": self._cost_stand_still(info["command"], data.qpos[7:]),
+            "action_smooth": self._cost_action_smooth(
+                action, info["last_act"], info["last_last_act"]
+            ),
+            "keep_balance": self._reward_keep_balance(),
+            "tracking_contacts_shaped_force": self._reward_tracking_contacts_shaped_force(
+                data, contact, info
+            ),
+            "tracking_contacts_shaped_vel": self._reward_tracking_contacts_shaped_vel(
+                data, contact, info
+            ),
             # Pose related rewards.
             "joint_deviation_hip": self._cost_joint_deviation_hip(
                 data.qpos[7:], info["command"]
@@ -731,6 +745,57 @@ class TronPfJoystickEnv(base.TronPfBaseEnv):
         error = jp.sum(jp.square(foot_z - rz))
         reward = jp.exp(-error / 0.01)
         return reward
+
+    def _cost_action_smooth(
+            self, act: jax.Array, last_act: jax.Array, last_last_act: jax.Array
+    ) -> jax.Array:
+        """Penalize second-order action changes."""
+        return jp.sum(jp.square(act - 2 * last_act + last_last_act))
+
+    def _reward_keep_balance(self) -> jax.Array:
+        """Constant positive reward for staying upright."""
+        return jp.array(1.0)
+
+    def _reward_tracking_contacts_shaped_force(
+            self, data: mjx.Data, contact: jax.Array, info: dict[str, Any]
+    ) -> jax.Array:
+        """Shaped reward for desired contact forces based on gait phase."""
+        del data  # Unused for now
+        # Get desired contact states from gait phase
+        # This is a simplified version - you may need to implement proper gait logic
+        phase = info.get("phase", jp.zeros(2))
+        # Simple alternating contact pattern
+        desired_contact = jp.array([
+            jp.cos(phase[0]) > 0,  # Left foot
+            jp.cos(phase[1]) > 0,  # Right foot
+        ])
+        
+        # Get foot forces (simplified - using contact as proxy)
+        foot_forces = contact.astype(jp.float32)
+        
+        reward = 0.0
+        for i in range(len(contact)):
+            # Reward when desired contact matches actual contact
+            reward += jp.where(
+                desired_contact[i],
+                foot_forces[i],  # Reward contact when desired
+                1.0 - foot_forces[i]  # Reward no contact when desired
+            )
+        
+        return reward / len(contact)
+
+    def _reward_tracking_contacts_shaped_vel(
+            self, data: mjx.Data, contact: jax.Array, info: dict[str, Any]
+    ) -> jax.Array:
+        """Shaped reward for foot velocities during contact."""
+        del info  # Unused for now
+        # Get foot velocities from sensor data
+        foot_velocities = data.sensordata[self._foot_linvel_sensor_adr]
+        foot_vel_norms = jp.linalg.norm(foot_velocities, axis=-1)
+        
+        # Penalize foot movement when in contact
+        reward = jp.sum(contact * jp.exp(-foot_vel_norms ** 2 / 0.1))
+        return reward / len(contact)
 
     def sample_command(self, rng: jax.Array) -> jax.Array:
         rng1, rng2, rng3, rng4 = jax.random.split(rng, 4)
